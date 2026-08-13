@@ -107,3 +107,36 @@ class StreamSource:
             source=str(data.get("source") or "live"),
         )
 
+
+@dataclass(frozen=True, slots=True)
+class Incident:
+    incident_id: str
+    camera_id: str
+    state: str
+    event_ids: tuple[int, ...]
+    representative_event_id: int | None
+    classes: tuple[str, ...]
+    zones: tuple[str, ...]
+    created_at: str
+    trigger_source: str
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "Incident":
+        data = _mapping(payload, "incident")
+        incident_id = str(data.get("incident_id") or "")
+        camera_id = str(data.get("camera_id") or "")
+        state = str(data.get("state") or "")
+        if not incident_id or not camera_id or state not in {"new", "updated", "complete"}:
+            raise SurvNGPayloadError("incident identity or lifecycle state is invalid")
+        representative = data.get("representative_event_id")
+        return cls(
+            incident_id=incident_id,
+            camera_id=camera_id,
+            state=state,
+            event_ids=tuple(int(value) for value in data.get("event_ids", []) if str(value).isdigit()),
+            representative_event_id=int(representative) if representative is not None else None,
+            classes=tuple(str(value) for value in data.get("classes", []) if value),
+            zones=tuple(str(value) for value in data.get("zones", []) if value),
+            created_at=str(data.get("created_at") or ""),
+            trigger_source=str(data.get("trigger_source") or ""),
+        )
