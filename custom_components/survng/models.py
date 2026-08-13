@@ -1,0 +1,109 @@
+"""Typed SurvNG API records."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Mapping
+
+
+class SurvNGPayloadError(ValueError):
+    """Raised when SurvNG returns an incompatible payload."""
+
+
+def _mapping(value: object, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise SurvNGPayloadError(f"{field_name} must be an object")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class ServerStatus:
+    instance_id: str
+    cpu_percent: float
+    memory_bytes: int
+    storage_free_bytes: int
+    cameras_total: int
+    cameras_online: int
+    cameras_recording: int
+    detector: Mapping[str, Any] = field(default_factory=dict)
+    mqtt: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "ServerStatus":
+        data = _mapping(payload, "system status")
+        resources = _mapping(data.get("resources", {}), "resources")
+        storage = _mapping(data.get("storage", {}), "storage")
+        cameras = _mapping(data.get("cameras", {}), "cameras")
+        instance_id = str(data.get("instance_id") or "")
+        if not instance_id:
+            raise SurvNGPayloadError("system status is missing instance_id")
+        return cls(
+            instance_id=instance_id,
+            cpu_percent=float(resources.get("cpu_load_percent") or 0),
+            memory_bytes=int(resources.get("application_memory_bytes") or 0),
+            storage_free_bytes=int(storage.get("free_bytes") or 0),
+            cameras_total=int(cameras.get("total") or 0),
+            cameras_online=int(cameras.get("online") or 0),
+            cameras_recording=int(cameras.get("recording") or 0),
+            detector=_mapping(data.get("detector", {}), "detector"),
+            mqtt=_mapping(data.get("mqtt", {}), "mqtt"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CameraStatus:
+    id: str
+    name: str
+    running: bool
+    connected: bool
+    frame_fresh: bool
+    detection_enabled: bool
+    recording: bool
+    onvif_connected: bool
+    last_motion_at: str
+    raw: Mapping[str, Any] = field(repr=False)
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "CameraStatus":
+        data = _mapping(payload, "camera")
+        camera_id = str(data.get("id") or "")
+        if not camera_id:
+            raise SurvNGPayloadError("camera is missing id")
+        return cls(
+            id=camera_id,
+            name=str(data.get("name") or camera_id),
+            running=bool(data.get("running")),
+            connected=bool(data.get("connected")),
+            frame_fresh=bool(data.get("frame_fresh")),
+            detection_enabled=bool(data.get("detection_enabled")),
+            recording=bool(data.get("recording")),
+            onvif_connected=bool(data.get("onvif_connected")),
+            last_motion_at=str(data.get("last_motion_at") or ""),
+            raw=data,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SurvNGData:
+    server: ServerStatus
+    cameras: Mapping[str, CameraStatus]
+
+
+@dataclass(frozen=True, slots=True)
+class StreamSource:
+    url: str
+    transport: str
+    source: str
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "StreamSource":
+        data = _mapping(payload, "stream source")
+        url = str(data.get("url") or data.get("stream_url") or "")
+        if not url.startswith(("rtsp://", "rtsps://")):
+            raise SurvNGPayloadError("stream source has no supported RTSP URL")
+        return cls(
+            url=url,
+            transport=str(data.get("transport") or "rtsp"),
+            source=str(data.get("source") or "live"),
+        )
+

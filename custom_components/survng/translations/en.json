@@ -1,0 +1,10 @@
+{
+  "config": {
+    "step": {
+      "user": {"title": "Connect to SurvNG", "description": "Create a read + camera-control token in SurvNG Admin > General > API.", "data": {"url": "SurvNG URL", "api_token": "API token", "verify_ssl": "Verify TLS certificate", "mqtt_prefix": "MQTT topic prefix"}},
+      "reauth_confirm": {"title": "Update SurvNG API token", "data": {"api_token": "API token"}}
+    },
+    "error": {"cannot_connect": "Unable to connect to SurvNG", "invalid_auth": "The API token is invalid or lacks required scopes"},
+    "abort": {"already_configured": "This SurvNG server is already configured", "reauth_successful": "Authentication updated"}
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "domain": "survng",
+  "name": "SurvNG",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["stream"],
+  "after_dependencies": ["mqtt"],
+  "documentation": "https://github.com/steveloebrich/SurvNG-HA",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}
