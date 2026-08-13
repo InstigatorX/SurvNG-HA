@@ -25,3 +25,12 @@ class SurvNGEntity(CoordinatorEntity[SurvNGCoordinator]):
                 manufacturer="SurvNG", model="Network video recorder",
             )
 
+    @property
+    def available(self) -> bool:
+        if self.camera_id is None:
+            return super().available
+        return super().available and self.camera_id in self.coordinator.data.cameras
+
+    @property
+    def camera(self):
+        return self.coordinator.data.cameras.get(self.camera_id)
