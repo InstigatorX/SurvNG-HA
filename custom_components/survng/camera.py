@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.camera import Camera
+from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.exceptions import HomeAssistantError
 
 from . import SurvNGConfigEntry
@@ -26,6 +26,7 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
 class SurvNGCamera(SurvNGEntity, Camera):
     _attr_name = None
     _attr_is_streaming = True
+    _attr_supported_features = CameraEntityFeature.STREAM
 
     def __init__(self, coordinator, camera_id: str) -> None:
         Camera.__init__(self)

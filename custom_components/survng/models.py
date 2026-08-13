@@ -20,6 +20,8 @@ def _mapping(value: object, field_name: str) -> Mapping[str, Any]:
 @dataclass(frozen=True, slots=True)
 class ServerStatus:
     instance_id: str
+    lifecycle: str
+    uptime_seconds: float
     cpu_percent: float
     memory_bytes: int
     storage_free_bytes: int
@@ -35,6 +37,8 @@ class ServerStatus:
         values = tuple(cameras.values())
         return cls(
             instance_id="unavailable",
+            lifecycle="unavailable",
+            uptime_seconds=0.0,
             cpu_percent=0.0,
             memory_bytes=0,
             storage_free_bytes=0,
@@ -54,6 +58,8 @@ class ServerStatus:
             raise SurvNGPayloadError("system status is missing instance_id")
         return cls(
             instance_id=instance_id,
+            lifecycle=str(data.get("lifecycle") or "running"),
+            uptime_seconds=max(0.0, float(data.get("uptime_seconds") or 0.0)),
             cpu_percent=float(resources.get("cpu_load_percent") or 0),
             memory_bytes=int(resources.get("application_memory_bytes") or 0),
             storage_free_bytes=int(storage.get("free_bytes") or 0),

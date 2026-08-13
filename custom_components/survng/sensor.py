@@ -3,8 +3,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
-from homeassistant.const import UnitOfInformation
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
+from homeassistant.const import UnitOfInformation, UnitOfTime
 
 from . import SurvNGConfigEntry
 from .entity import SurvNGEntity
@@ -16,6 +16,8 @@ class SurvNGServerSensorDescription(SensorEntityDescription):
 
 
 SERVER_SENSORS = (
+    SurvNGServerSensorDescription(key="system_status", name="System status", value_fn=lambda s: s.lifecycle),
+    SurvNGServerSensorDescription(key="uptime", name="Uptime", device_class=SensorDeviceClass.DURATION, native_unit_of_measurement=UnitOfTime.SECONDS, value_fn=lambda s: round(s.uptime_seconds)),
     SurvNGServerSensorDescription(key="cpu", name="CPU", native_unit_of_measurement="%", value_fn=lambda s: s.cpu_percent),
     SurvNGServerSensorDescription(key="memory", name="Memory", native_unit_of_measurement=UnitOfInformation.BYTES, value_fn=lambda s: s.memory_bytes),
     SurvNGServerSensorDescription(key="storage_free", name="Storage free", native_unit_of_measurement=UnitOfInformation.BYTES, value_fn=lambda s: s.storage_free_bytes),

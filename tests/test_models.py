@@ -28,9 +28,10 @@ def test_normalize_base_url_preserves_subpath() -> None:
 
 def test_typed_contracts() -> None:
     camera = CameraStatus.from_payload({"id": "gate", "name": "Gate", "running": True, "frame_fresh": True})
-    server = ServerStatus.from_payload({"instance_id": "abc", "resources": {"cpu_load_percent": 4.2, "application_memory_bytes": 9}, "storage": {"free_bytes": 10}, "cameras": {"total": 1, "online": 1, "recording": 1}})
+    server = ServerStatus.from_payload({"instance_id": "abc", "lifecycle": "running", "uptime_seconds": 12.5, "resources": {"cpu_load_percent": 4.2, "application_memory_bytes": 9}, "storage": {"free_bytes": 10}, "cameras": {"total": 1, "online": 1, "recording": 1}})
     stream = StreamSource.from_payload({"url": "rtsp://go2rtc:8554/gate", "source": "live"})
     assert camera.id == "gate" and server.cameras_online == 1 and stream.transport == "rtsp"
+    assert server.lifecycle == "running" and server.uptime_seconds == 12.5
 
 
 def test_server_status_fallback_preserves_camera_counts() -> None:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
@@ -146,7 +147,41 @@ class SurvNGApiClient:
             "GET", f"/api/cameras/{quote(camera_id, safe='')}/stream-source",
             params={"source": source},
         )
-        return StreamSource.from_payload(payload)
+        descriptor = StreamSource.from_payload(payload)
+        stream = urlsplit(descriptor.url)
+        api = urlsplit(self.base_url)
+        if (
+            stream.hostname
+            and stream.port
+            and api.hostname
+            and stream.hostname != api.hostname
+            and not await self._rtsp_endpoint_reachable(stream.hostname, stream.port)
+            and await self._rtsp_endpoint_reachable(api.hostname, stream.port)
+        ):
+            host = f"[{api.hostname}]" if ":" in api.hostname else api.hostname
+            authority = f"{host}:{stream.port}" if stream.port else host
+            descriptor = StreamSource(
+                url=urlunsplit((stream.scheme, authority, stream.path, "", "")),
+                transport=descriptor.transport,
+                source=descriptor.source,
+            )
+        return descriptor
+
+    @staticmethod
+    async def _rtsp_endpoint_reachable(host: str, port: int) -> bool:
+        writer = None
+        try:
+            _reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port),
+                timeout=0.75,
+            )
+            return True
+        except (OSError, TimeoutError):
+            return False
+        finally:
+            if writer is not None:
+                writer.close()
+                await writer.wait_closed()
 
     async def set_camera_power(self, camera_id: str, enabled: bool) -> None:
         action = "start" if enabled else "stop"
