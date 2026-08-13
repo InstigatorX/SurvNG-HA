@@ -41,7 +41,7 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]),
                     url, user_input.get(CONF_API_TOKEN, ""),
                 )
-                await client.server_status()
+                await client.health()
                 await client.cameras()
                 await self.async_set_unique_id(url.lower())
                 self._abort_if_unique_id_configured()
@@ -72,7 +72,8 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     async_get_clientsession(self.hass, verify_ssl=self._reauth_entry.data.get(CONF_VERIFY_SSL, True)),
                     self._reauth_entry.data[CONF_URL], user_input[CONF_API_TOKEN],
                 )
-                await client.server_status()
+                await client.health()
+                await client.cameras()
                 return self.async_update_reload_and_abort(
                     self._reauth_entry, data_updates={CONF_API_TOKEN: user_input[CONF_API_TOKEN]},
                 )
@@ -95,7 +96,8 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]),
                     url, entry.data[CONF_API_TOKEN],
                 )
-                await client.server_status()
+                await client.health()
+                await client.cameras()
                 await self.async_set_unique_id(url.lower())
                 self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(entry, data_updates={**user_input, CONF_URL: url})

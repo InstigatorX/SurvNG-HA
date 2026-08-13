@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -10,7 +11,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .models import SurvNGData
+from .models import ServerStatus, SurvNGData
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
@@ -24,7 +27,6 @@ class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
 
     async def _async_update_data(self) -> SurvNGData:
         try:
-            server = await self.client.server_status()
             cameras = await self.client.cameras()
             zones = await self.client.camera_zones()
             recent_incidents = await self.client.recent_incidents()
@@ -33,9 +35,20 @@ class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
             raise
         except SurvNGError as error:
             raise UpdateFailed(str(error)) from error
+        camera_map = {camera.id: camera for camera in cameras}
+        try:
+            server = await self.client.server_status()
+        except SurvNGAuthError:
+            self.config_entry.async_start_reauth(self.hass)
+            raise
+        except SurvNGError:
+            LOGGER.warning(
+                "SurvNG server metrics are unavailable; retaining camera entities"
+            )
+            server = ServerStatus.unavailable(camera_map)
         return SurvNGData(
             server=server,
-            cameras={camera.id: camera for camera in cameras},
+            cameras=camera_map,
             zones=zones,
             recent_incidents=recent_incidents,
         )

@@ -30,6 +30,20 @@ class ServerStatus:
     mqtt: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
+    def unavailable(cls, cameras: Mapping[str, CameraStatus]) -> ServerStatus:
+        """Represent optional server metrics without hiding camera entities."""
+        values = tuple(cameras.values())
+        return cls(
+            instance_id="unavailable",
+            cpu_percent=0.0,
+            memory_bytes=0,
+            storage_free_bytes=0,
+            cameras_total=len(values),
+            cameras_online=sum(1 for camera in values if camera.running),
+            cameras_recording=sum(1 for camera in values if camera.recording),
+        )
+
+    @classmethod
     def from_payload(cls, payload: object) -> ServerStatus:
         data = _mapping(payload, "system status")
         resources = _mapping(data.get("resources", {}), "resources")

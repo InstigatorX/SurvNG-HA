@@ -59,10 +59,11 @@ class SurvNGApiClient:
         return b"".join(chunks)
 
     async def _response(self, method: str, path: str, **kwargs: Any) -> ClientResponse:
+        request_timeout = kwargs.pop("timeout", self._timeout)
         try:
             response = await self._session.request(
                 method, self.url(path), headers=self.headers,
-                timeout=self._timeout, **kwargs,
+                timeout=request_timeout, **kwargs,
             )
         except (ClientError, TimeoutError) as error:
             raise SurvNGConnectionError("Unable to connect to SurvNG") from error
@@ -89,7 +90,15 @@ class SurvNGApiClient:
             response.release()
 
     async def server_status(self) -> ServerStatus:
-        return ServerStatus.from_payload(await self._json("GET", "/api/system/status"))
+        return ServerStatus.from_payload(await self._json(
+            "GET", "/api/system/status",
+            timeout=ClientTimeout(total=5, connect=3),
+        ))
+
+    async def health(self) -> None:
+        payload = await self._json("GET", "/api/health")
+        if not isinstance(payload, dict) or payload.get("status") != "ok":
+            raise SurvNGPayloadError("SurvNG health response is incompatible")
 
     async def cameras(self) -> list[CameraStatus]:
         payload = await self._json("GET", "/api/cameras")

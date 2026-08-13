@@ -33,6 +33,24 @@ def test_typed_contracts() -> None:
     assert camera.id == "gate" and server.cameras_online == 1 and stream.transport == "rtsp"
 
 
+def test_server_status_fallback_preserves_camera_counts() -> None:
+    cameras = {
+        "gate": CameraStatus.from_payload({
+            "id": "gate", "name": "Gate", "running": True, "recording": True,
+        }),
+        "yard": CameraStatus.from_payload({
+            "id": "yard", "name": "Yard", "running": False, "recording": False,
+        }),
+    }
+
+    status = ServerStatus.unavailable(cameras)
+
+    assert status.instance_id == "unavailable"
+    assert status.cameras_total == 2
+    assert status.cameras_online == 1
+    assert status.cameras_recording == 1
+
+
 def test_credentials_in_url_are_rejected() -> None:
     try:
         normalize_base_url("https://user:secret@example/survng")
