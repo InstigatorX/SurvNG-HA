@@ -99,9 +99,9 @@ class SurvNGApiClient:
         return [CameraStatus.from_payload(item) for item in payload]
 
     async def camera_zones(self) -> dict[str, tuple[str, ...]]:
-        payload = await self._json("GET", "/api/config")
+        payload = await self._json("GET", "/api/integrations/home-assistant")
         if not isinstance(payload, dict) or not isinstance(payload.get("cameras"), list):
-            raise SurvNGPayloadError("configuration has no camera inventory")
+            raise SurvNGPayloadError("integration metadata has no camera inventory")
         return {
             str(camera["id"]): tuple(
                 str(zone["name"]) for zone in camera.get("zones", [])

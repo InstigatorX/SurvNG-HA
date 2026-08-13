@@ -17,6 +17,7 @@ that path, and append the paths below.
 | Clean current image | `GET /api/cameras/{camera_id}/snapshot.jpg?source=live|main` | Returns a clean JPEG with `Cache-Control: no-store`; `404` for an unknown camera and `503` for a powered-off camera or unavailable frame. |
 | Stream metadata | `GET /api/cameras/{camera_id}/live-info?source=live|main` | Returns go2rtc availability, stream name, codec list, delivery and transcoding state. It currently also returns an internal go2rtc host. |
 | Stable stream source | `GET /api/cameras/{camera_id}/stream-source?source=live|main` | Returns a versioned, credential-safe, FFmpeg-readable go2rtc RTSP descriptor. The integration consumes the returned URL but never exposes it as entity state or diagnostics. |
+| HA entity metadata | `GET /api/integrations/home-assistant` | Read-scoped, credential-free MQTT and enabled camera-zone inventory for dynamic entity reconciliation. |
 | Browser MJPEG fallback | `GET /api/cameras/{camera_id}/stream.mjpg?source=live|main&fps=...` | Relays JPEG frames at a bounded rate. This is a compatibility fallback, not the preferred HA stream source. |
 | WebRTC/MSE browser relays | `WS /api/cameras/{camera_id}/webrtc` and `/mse` | SurvNG-specific go2rtc WebSocket relays. They do not directly satisfy Home Assistant's `stream_source()` contract. |
 | Camera power | `POST /api/cameras/{camera_id}/camera/start|stop` | Returns `{"ok": true}` or `404`. |
