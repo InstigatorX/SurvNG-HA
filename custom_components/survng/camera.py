@@ -48,3 +48,12 @@ class SurvNGCamera(SurvNGEntity, Camera):
             return await self.coordinator.client.snapshot(self.camera_id, source)
         except SurvNGError as error:
             raise HomeAssistantError("Unable to retrieve the SurvNG snapshot") from error
+
+    async def stream_source(self) -> str | None:
+        """Return a fresh internal stream descriptor for each playback request."""
+        source = self.coordinator.config_entry.options.get(CONF_STREAM_SOURCE, DEFAULT_STREAM_SOURCE)
+        try:
+            descriptor = await self.coordinator.client.stream_source(self.camera_id, source)
+        except SurvNGError as error:
+            raise HomeAssistantError("Unable to retrieve the SurvNG stream source") from error
+        return descriptor.url
