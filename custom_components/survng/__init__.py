@@ -11,6 +11,7 @@ from .api import SurvNGApiClient
 from .const import CONF_API_TOKEN, DOMAIN, PLATFORMS
 from .coordinator import SurvNGCoordinator
 from .mqtt import SurvNGMqttState, async_subscribe_state
+from .repairs import update_legacy_discovery_issue
 
 
 @dataclass(slots=True)
@@ -33,6 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
     mqtt_state = SurvNGMqttState()
     entry.runtime_data = SurvNGRuntimeData(client, coordinator, mqtt_state, [])
+    update_legacy_discovery_issue(hass, entry, coordinator.data.server.mqtt)
     entry.runtime_data.mqtt_unsubscribers.extend(
         await async_subscribe_state(hass, entry, mqtt_state, coordinator)
     )
@@ -52,3 +54,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> b
             unsubscribe()
         entry.runtime_data.mqtt_unsubscribers.clear()
     return unloaded
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Normalize early development entries without changing their identity."""
+    if entry.version > 1:
+        return False
+    data = dict(entry.data)
+    data.setdefault(CONF_API_TOKEN, "")
+    data.setdefault("verify_ssl", True)
+    data.setdefault("mqtt_prefix", "survng")
+    hass.config_entries.async_update_entry(entry, data=data, version=1)
+    return True

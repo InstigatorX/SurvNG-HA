@@ -78,6 +78,30 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({vol.Required(CONF_API_TOKEN): str}), errors=errors,
         )
 
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
+        if user_input:
+            try:
+                url = normalize_base_url(user_input[CONF_URL])
+                client = SurvNGApiClient(
+                    async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]),
+                    url, entry.data[CONF_API_TOKEN],
+                )
+                await client.server_status()
+                await self.async_set_unique_id(url.lower())
+                self._abort_if_unique_id_mismatch()
+                return self.async_update_reload_and_abort(entry, data_updates={**user_input, CONF_URL: url})
+            except SurvNGAuthError:
+                errors["base"] = "invalid_auth"
+            except (SurvNGError, ValueError):
+                errors["base"] = "cannot_connect"
+        return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({
+            vol.Required(CONF_URL, default=entry.data[CONF_URL]): str,
+            vol.Required(CONF_VERIFY_SSL, default=entry.data.get(CONF_VERIFY_SSL, True)): bool,
+            vol.Required(CONF_MQTT_PREFIX, default=entry.data.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX)): str,
+        }), errors=errors)
+
 
 class SurvNGOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry) -> None:

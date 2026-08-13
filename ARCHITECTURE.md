@@ -35,9 +35,9 @@ SurvNG now supports native scoped long-lived bearer tokens. Tokens are created
 in **Admin → General → API** or with `scripts/create-api-token.py`; only a
 digest is retained and the raw secret is shown once. The integration requests a
 token carrying `read` and `camera:control`. An `admin` token works but is
-unnecessarily privileged. A token may be omitted only when SurvNG explicitly
-reports that API enforcement is disabled, and the flow warns that trusted-LAN
-mode is a compatibility option rather than the recommended deployment.
+unnecessarily privileged. The integration always requires a token so enabling
+SurvNG enforcement later cannot unexpectedly disconnect an entry created in a
+temporary trusted-LAN mode.
 
 Every HTTP, image and SSE request uses the same bearer header. The token is
 stored only in the Home Assistant config entry and is never copied into URLs,

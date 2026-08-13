@@ -24,14 +24,21 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
     unsubscribe_entities = setup_dynamic_camera_entities(coordinator, async_add_entities, factory)
     seen: dict[str, str] = {}
 
+    lifecycle_rank = {"new": 0, "updated": 1, "complete": 2}
+
+    def merge_reconciled_incident(incident) -> None:
+        current = mqtt.incidents.get(incident.incident_id)
+        if current is None or lifecycle_rank[incident.state] > lifecycle_rank[current.state]:
+            mqtt.incidents[incident.incident_id] = incident
+
     for incident in coordinator.data.recent_incidents:
-        mqtt.incidents.setdefault(incident.incident_id, incident)
+        merge_reconciled_incident(incident)
 
     def publish_incidents() -> None:
         for incident in coordinator.data.recent_incidents:
-            mqtt.incidents.setdefault(incident.incident_id, incident)
+            merge_reconciled_incident(incident)
         for incident in mqtt.incidents.values():
-            identity = f"{incident.incident_id}:{incident.state}:{incident.representative_event_id}"
+            identity = repr((incident.state, incident.representative_event_id, incident.event_ids, incident.classes, incident.zones))
             if seen.get(incident.incident_id) == identity:
                 continue
             seen[incident.incident_id] = identity
