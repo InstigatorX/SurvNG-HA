@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 from urllib.parse import quote
@@ -65,7 +64,7 @@ class SurvNGApiClient:
                 method, self.url(path), headers=self.headers,
                 timeout=self._timeout, **kwargs,
             )
-        except (ClientError, asyncio.TimeoutError) as error:
+        except (ClientError, TimeoutError) as error:
             raise SurvNGConnectionError("Unable to connect to SurvNG") from error
         if response.status in {401, 403}:
             response.release()

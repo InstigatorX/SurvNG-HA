@@ -1,6 +1,6 @@
 # SurvNG Home Assistant integration architecture
 
-Status: approved for phased implementation
+Status: phases 1–6 implemented; Home Assistant installation acceptance pending
 
 ## Verified SurvNG contracts
 
@@ -13,7 +13,7 @@ that path, and append the paths below.
 | Camera inventory and runtime state | `GET /api/cameras` | Returns one runtime-status object per stable camera ID. Includes display name, running/connected/fresh-frame state, detection state, recording state, capture health, stream dimensions, ONVIF state, and motion/tracking diagnostics. |
 | Server health | `GET /api/system/status` | Returns process instance ID, CPU and application memory, storage, detector, aggregate camera counts, MQTT, go2rtc, and camera-startup status. |
 | Integration authentication | `Authorization: Bearer <token>` | Native scoped long-lived tokens. `read` covers inventory, status, snapshots, streams and events; `camera:control` covers power, recording and detection changes; `admin` includes every scope but is not needed by this integration. |
-| State reconciliation | `GET /api/events/stream` | Server-sent event stream. Emits initial camera/system snapshots when replay is unavailable, then typed application events. Connections intentionally end after approximately six seconds and must reconnect with `Last-Event-ID`. |
+| Optional event stream | `GET /api/events/stream` | Server-sent event stream. Emits initial camera/system snapshots when replay is unavailable, then typed application events. The first integration release deliberately uses bounded HTTP reconciliation plus optional MQTT instead of adding a third long-lived transport owner. |
 | Clean current image | `GET /api/cameras/{camera_id}/snapshot.jpg?source=live|main` | Returns a clean JPEG with `Cache-Control: no-store`; `404` for an unknown camera and `503` for a powered-off camera or unavailable frame. |
 | Stream metadata | `GET /api/cameras/{camera_id}/live-info?source=live|main` | Returns go2rtc availability, stream name, codec list, delivery and transcoding state. It currently also returns an internal go2rtc host. |
 | Stable stream source | `GET /api/cameras/{camera_id}/stream-source?source=live|main` | Returns a versioned, credential-safe, FFmpeg-readable go2rtc RTSP descriptor. The integration consumes the returned URL but never exposes it as entity state or diagnostics. |
@@ -171,11 +171,12 @@ The first flow collects:
 - SSL verification;
 - MQTT topic prefix when MQTT is enabled.
 
-Validation calls `/api/system/status`, `/api/cameras`, and a read-only stream
-descriptor, verifies JSON schemas, and distinguishes rejected credentials from
-connection failures. SurvNG does not expose a non-mutating scope-introspection
-endpoint, so `camera:control` is verified on the first control operation. A
-camera being offline must not invalidate an otherwise valid server entry.
+Validation calls `/api/system/status` and `/api/cameras`, verifies their JSON
+schemas, and distinguishes rejected credentials from connection failures.
+Stream descriptors are validated on first playback so an offline camera or a
+temporarily unavailable go2rtc service cannot prevent otherwise valid setup.
+SurvNG does not expose a non-mutating scope-introspection endpoint, so
+`camera:control` is verified on the first control operation.
 
 The options flow controls reconciliation interval, preferred stream and
 optional entity families. `401` and `403` initiate reauthentication. Reconfigure

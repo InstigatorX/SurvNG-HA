@@ -9,9 +9,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-      - run: pip install pytest aiohttp voluptuous
+          python-version: "3.13.2"
+      - run: pip install homeassistant==2025.12.5 pytest ruff
+      - run: ruff check custom_components tests
       - run: python -m compileall -q custom_components tests
+      - run: |
+          python - <<'PY'
+          modules = (
+              "custom_components.survng",
+              "custom_components.survng.api",
+              "custom_components.survng.binary_sensor",
+              "custom_components.survng.camera",
+              "custom_components.survng.config_flow",
+              "custom_components.survng.coordinator",
+              "custom_components.survng.diagnostics",
+              "custom_components.survng.event",
+              "custom_components.survng.mqtt",
+              "custom_components.survng.repairs",
+              "custom_components.survng.sensor",
+              "custom_components.survng.switch",
+          )
+          for module in modules:
+              __import__(module)
+          PY
       - run: pytest -q
       - run: python -m json.tool custom_components/survng/manifest.json >/dev/null
       - run: python -m json.tool custom_components/survng/strings.json >/dev/null

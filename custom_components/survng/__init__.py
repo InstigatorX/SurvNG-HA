@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import SurvNGApiClient
-from .const import CONF_API_TOKEN, DOMAIN, PLATFORMS
+from .const import CONF_API_TOKEN, PLATFORMS
 from .coordinator import SurvNGCoordinator
 from .mqtt import SurvNGMqttState, async_subscribe_state
 from .repairs import update_legacy_discovery_issue

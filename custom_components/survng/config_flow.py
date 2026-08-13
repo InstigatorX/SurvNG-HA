@@ -11,9 +11,16 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError
 from .const import (
-    CONF_API_TOKEN, CONF_MQTT_PREFIX, CONF_SCAN_INTERVAL, CONF_STREAM_SOURCE,
-    DEFAULT_MQTT_PREFIX, DEFAULT_SCAN_INTERVAL, DEFAULT_STREAM_SOURCE,
-    MAX_SCAN_INTERVAL, MIN_SCAN_INTERVAL, DOMAIN,
+    CONF_API_TOKEN,
+    CONF_MQTT_PREFIX,
+    CONF_SCAN_INTERVAL,
+    CONF_STREAM_SOURCE,
+    DEFAULT_MQTT_PREFIX,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_STREAM_SOURCE,
+    DOMAIN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
 )
 from .urls import normalize_base_url
 
@@ -35,7 +42,7 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     url, user_input.get(CONF_API_TOKEN, ""),
                 )
                 await client.server_status()
-                cameras = await client.cameras()
+                await client.cameras()
                 await self.async_set_unique_id(url.lower())
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(

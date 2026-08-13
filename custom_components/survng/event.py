@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from homeassistant.components.event import EventEntity
 
 from . import SurvNGConfigEntry
@@ -68,7 +70,7 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
 
 class SurvNGIncidentEvent(SurvNGEntity, EventEntity):
     _attr_name = "Incident"
-    _attr_event_types = ["new", "updated", "complete"]
+    _attr_event_types: ClassVar[list[str]] = ["new", "updated", "complete"]
 
     def __init__(self, coordinator, mqtt, camera_id: str) -> None:
         super().__init__(coordinator, camera_id)

@@ -1,7 +1,7 @@
 """SurvNG server and camera sensors."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.const import UnitOfInformation

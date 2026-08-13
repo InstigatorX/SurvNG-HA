@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 
 class SurvNGPayloadError(ValueError):
@@ -29,7 +30,7 @@ class ServerStatus:
     mqtt: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_payload(cls, payload: object) -> "ServerStatus":
+    def from_payload(cls, payload: object) -> ServerStatus:
         data = _mapping(payload, "system status")
         resources = _mapping(data.get("resources", {}), "resources")
         storage = _mapping(data.get("storage", {}), "storage")
@@ -64,7 +65,7 @@ class CameraStatus:
     raw: Mapping[str, Any] = field(repr=False)
 
     @classmethod
-    def from_payload(cls, payload: object) -> "CameraStatus":
+    def from_payload(cls, payload: object) -> CameraStatus:
         data = _mapping(payload, "camera")
         camera_id = str(data.get("id") or "")
         if not camera_id:
@@ -88,7 +89,7 @@ class SurvNGData:
     server: ServerStatus
     cameras: Mapping[str, CameraStatus]
     zones: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    recent_incidents: tuple["Incident", ...] = ()
+    recent_incidents: tuple[Incident, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +99,7 @@ class StreamSource:
     source: str
 
     @classmethod
-    def from_payload(cls, payload: object) -> "StreamSource":
+    def from_payload(cls, payload: object) -> StreamSource:
         data = _mapping(payload, "stream source")
         url = str(data.get("url") or data.get("stream_url") or "")
         if not url.startswith(("rtsp://", "rtsps://")):
@@ -123,7 +124,7 @@ class Incident:
     trigger_source: str
 
     @classmethod
-    def from_payload(cls, payload: object) -> "Incident":
+    def from_payload(cls, payload: object) -> Incident:
         data = _mapping(payload, "incident")
         incident_id = str(data.get("incident_id") or "")
         camera_id = str(data.get("camera_id") or "")
@@ -144,7 +145,7 @@ class Incident:
         )
 
     @classmethod
-    def from_feed_item(cls, payload: object) -> "Incident":
+    def from_feed_item(cls, payload: object) -> Incident:
         data = _mapping(payload, "incident feed item")
         incident_id = str(data.get("incident_id") or data.get("id") or "")
         camera_id = str(data.get("camera_id") or "")
