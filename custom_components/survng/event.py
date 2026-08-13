@@ -24,7 +24,12 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
     unsubscribe_entities = setup_dynamic_camera_entities(coordinator, async_add_entities, factory)
     seen: dict[str, str] = {}
 
+    for incident in coordinator.data.recent_incidents:
+        mqtt.incidents.setdefault(incident.incident_id, incident)
+
     def publish_incidents() -> None:
+        for incident in coordinator.data.recent_incidents:
+            mqtt.incidents.setdefault(incident.incident_id, incident)
         for incident in mqtt.incidents.values():
             identity = f"{incident.incident_id}:{incident.state}:{incident.representative_event_id}"
             if seen.get(incident.incident_id) == identity:
@@ -49,6 +54,7 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
             hass.bus.async_fire(EVENT_TYPE, payload)
 
     unsubscribe_incidents = coordinator.async_add_listener(publish_incidents)
+    publish_incidents()
     entry.async_on_unload(unsubscribe_entities)
     entry.async_on_unload(unsubscribe_incidents)
 

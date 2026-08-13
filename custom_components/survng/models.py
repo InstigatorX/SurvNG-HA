@@ -87,6 +87,8 @@ class CameraStatus:
 class SurvNGData:
     server: ServerStatus
     cameras: Mapping[str, CameraStatus]
+    zones: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    recent_incidents: tuple["Incident", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,5 +140,25 @@ class Incident:
             classes=tuple(str(value) for value in data.get("classes", []) if value),
             zones=tuple(str(value) for value in data.get("zones", []) if value),
             created_at=str(data.get("created_at") or ""),
+            trigger_source=str(data.get("trigger_source") or ""),
+        )
+
+    @classmethod
+    def from_feed_item(cls, payload: object) -> "Incident":
+        data = _mapping(payload, "incident feed item")
+        incident_id = str(data.get("incident_id") or data.get("id") or "")
+        camera_id = str(data.get("camera_id") or "")
+        if not incident_id or not camera_id:
+            raise SurvNGPayloadError("incident feed item is missing identity")
+        representative = data.get("representative_event_id")
+        return cls(
+            incident_id=incident_id,
+            camera_id=camera_id,
+            state="complete",
+            event_ids=tuple(int(item.get("id")) for item in data.get("events", []) if isinstance(item, Mapping) and item.get("id")),
+            representative_event_id=int(representative) if representative is not None else None,
+            classes=tuple(str(value) for value in data.get("labels", []) if value),
+            zones=tuple(str(value) for value in data.get("zones", []) if value),
+            created_at=str(data.get("created_at") or data.get("start_at") or ""),
             trigger_source=str(data.get("trigger_source") or ""),
         )

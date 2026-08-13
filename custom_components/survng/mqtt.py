@@ -18,6 +18,7 @@ class SurvNGMqttState:
     motion: dict[str, bool] = field(default_factory=dict)
     objects: dict[str, tuple[str, ...]] = field(default_factory=dict)
     zones: dict[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
+    zone_until: dict[tuple[str, str], float] = field(default_factory=dict)
     incidents: dict[str, Incident] = field(default_factory=dict)
     incident_sequence: int = 0
     motion_until: dict[str, float] = field(default_factory=dict)
@@ -28,6 +29,10 @@ class SurvNGMqttState:
 
     def object_active(self, camera_id: str, now: float | None = None) -> bool:
         return bool(self.objects.get(camera_id)) and self.object_until.get(camera_id, 0) > (now or time.monotonic())
+
+    def zone_active(self, camera_id: str, zone_slug: str, now: float | None = None) -> bool:
+        key = (camera_id, zone_slug)
+        return bool(self.zones.get(key)) and self.zone_until.get(key, 0) > (now or time.monotonic())
 
     def update(self, topic: str, raw_payload: str, prefix: str = "survng") -> bool:
         try:
@@ -63,7 +68,9 @@ class SurvNGMqttState:
                 self.object_until[camera_id] = time.monotonic() + 15
                 return True
         if len(rest) >= 4 and rest[0] == "zone" and rest[3] == "object":
-            self.zones[(rest[1], rest[2])] = tuple(str(item) for item in payload.get("classes", []) if item)
+            key = (rest[1], rest[2])
+            self.zones[key] = tuple(str(item) for item in payload.get("classes", []) if item)
+            self.zone_until[key] = time.monotonic() + 15
             return True
         return False
 

@@ -26,10 +26,16 @@ class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
         try:
             server = await self.client.server_status()
             cameras = await self.client.cameras()
+            zones = await self.client.camera_zones()
+            recent_incidents = await self.client.recent_incidents()
         except SurvNGAuthError:
             self.config_entry.async_start_reauth(self.hass)
             raise
         except SurvNGError as error:
             raise UpdateFailed(str(error)) from error
-        return SurvNGData(server=server, cameras={camera.id: camera for camera in cameras})
-
+        return SurvNGData(
+            server=server,
+            cameras={camera.id: camera for camera in cameras},
+            zones=zones,
+            recent_incidents=recent_incidents,
+        )

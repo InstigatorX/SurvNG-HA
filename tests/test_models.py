@@ -18,6 +18,7 @@ urls = load_module("urls")
 CameraStatus = models.CameraStatus
 ServerStatus = models.ServerStatus
 StreamSource = models.StreamSource
+Incident = models.Incident
 normalize_base_url = urls.normalize_base_url
 
 
@@ -38,3 +39,11 @@ def test_credentials_in_url_are_rejected() -> None:
     except ValueError:
         return
     raise AssertionError("embedded credentials accepted")
+
+
+def test_incident_feed_item_maps_to_complete_lifecycle() -> None:
+    incident = Incident.from_feed_item({
+        "incident_id": "gate-1", "camera_id": "gate", "representative_event_id": 9,
+        "events": [{"id": 8}, {"id": 9}], "labels": ["car"], "zones": ["Driveway"],
+    })
+    assert incident.state == "complete" and incident.event_ids == (8, 9)

@@ -35,3 +35,10 @@ def test_incident_updates_are_deduplicated() -> None:
     assert not state.update("survng/events/incidents", payload)
     assert state.incident_sequence == 1
     assert state.incidents["incident-gate-1"].classes == ("car",)
+
+
+def test_zone_activity_expires() -> None:
+    state = load_mqtt().SurvNGMqttState()
+    assert state.update("survng/zone/gate/front-drive/object", '{"classes":["car"]}')
+    assert state.zone_active("gate", "front-drive")
+    assert not state.zone_active("gate", "front-drive", now=state.zone_until[("gate", "front-drive")] + 1)

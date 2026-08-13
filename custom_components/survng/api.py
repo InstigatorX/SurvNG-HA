@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
-from .models import CameraStatus, ServerStatus, StreamSource, SurvNGPayloadError
+from .models import CameraStatus, Incident, ServerStatus, StreamSource, SurvNGPayloadError
 from .urls import normalize_base_url
 
 MAX_JSON_BYTES = 4 * 1024 * 1024
@@ -97,6 +97,28 @@ class SurvNGApiClient:
         if not isinstance(payload, list):
             raise SurvNGPayloadError("camera inventory must be a list")
         return [CameraStatus.from_payload(item) for item in payload]
+
+    async def camera_zones(self) -> dict[str, tuple[str, ...]]:
+        payload = await self._json("GET", "/api/config")
+        if not isinstance(payload, dict) or not isinstance(payload.get("cameras"), list):
+            raise SurvNGPayloadError("configuration has no camera inventory")
+        return {
+            str(camera["id"]): tuple(
+                str(zone["name"]) for zone in camera.get("zones", [])
+                if isinstance(zone, dict) and zone.get("enabled", True) and zone.get("name")
+            )
+            for camera in payload["cameras"]
+            if isinstance(camera, dict) and camera.get("id")
+        }
+
+    async def recent_incidents(self, limit: int = 20) -> tuple[Incident, ...]:
+        payload = await self._json(
+            "GET", "/api/incidents/feed",
+            params={"event_type": "object", "limit": max(1, min(limit, 100)), "offset": 0},
+        )
+        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+            raise SurvNGPayloadError("incident feed has no items")
+        return tuple(Incident.from_feed_item(item) for item in payload["items"])
 
     async def snapshot(self, camera_id: str, source: str = "live") -> bytes:
         response = await self._response(
