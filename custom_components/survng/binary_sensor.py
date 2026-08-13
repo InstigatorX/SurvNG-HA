@@ -28,4 +28,4 @@ class SurvNGActivitySensor(SurvNGEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.mqtt.motion.get(self.camera_id, False) if self.kind == "motion" else bool(self.mqtt.objects.get(self.camera_id))
+        return self.mqtt.motion_active(self.camera_id) if self.kind == "motion" else self.mqtt.object_active(self.camera_id)

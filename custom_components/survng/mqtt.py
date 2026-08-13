@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -19,6 +20,14 @@ class SurvNGMqttState:
     zones: dict[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
     incidents: dict[str, Incident] = field(default_factory=dict)
     incident_sequence: int = 0
+    motion_until: dict[str, float] = field(default_factory=dict)
+    object_until: dict[str, float] = field(default_factory=dict)
+
+    def motion_active(self, camera_id: str, now: float | None = None) -> bool:
+        return self.motion.get(camera_id, False) and self.motion_until.get(camera_id, 0) > (now or time.monotonic())
+
+    def object_active(self, camera_id: str, now: float | None = None) -> bool:
+        return bool(self.objects.get(camera_id)) and self.object_until.get(camera_id, 0) > (now or time.monotonic())
 
     def update(self, topic: str, raw_payload: str, prefix: str = "survng") -> bool:
         try:
@@ -47,9 +56,11 @@ class SurvNGMqttState:
             camera_id, kind = rest[1], rest[2]
             if kind == "motion":
                 self.motion[camera_id] = bool(payload.get("active", payload.get("camera_id")))
+                self.motion_until[camera_id] = time.monotonic() + 10
                 return True
             if kind == "object":
                 self.objects[camera_id] = tuple(str(item) for item in payload.get("classes", []) if item)
+                self.object_until[camera_id] = time.monotonic() + 15
                 return True
         if len(rest) >= 4 and rest[0] == "zone" and rest[3] == "object":
             self.zones[(rest[1], rest[2])] = tuple(str(item) for item in payload.get("classes", []) if item)
@@ -65,11 +76,27 @@ async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator
         return []
     prefix = entry.data.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX).strip("/")
 
+    from homeassistant.helpers.event import async_call_later
+    expiry_cancellers: dict[str, Any] = {}
+
+    def expire(_now, topic: str) -> None:
+        expiry_cancellers.pop(topic, None)
+        coordinator.async_update_listeners()
+
     async def receive(message: Any) -> None:
         if state.update(message.topic, message.payload, prefix):
             coordinator.async_update_listeners()
+            if message.topic.endswith("/motion") or message.topic.endswith("/object"):
+                existing = expiry_cancellers.pop(message.topic, None)
+                if existing:
+                    existing()
+                delay = 10 if message.topic.endswith("/motion") else 15
+                expiry_cancellers[message.topic] = async_call_later(
+                    hass, delay, lambda now, topic=message.topic: expire(now, topic),
+                )
 
     unsubscribers = []
     for topic in (f"{prefix}/camera/+/motion", f"{prefix}/camera/+/object", f"{prefix}/zone/+/+/object", f"{prefix}/events/incidents"):
         unsubscribers.append(await mqtt.async_subscribe(hass, topic, receive, qos=0, encoding="utf-8"))
+    unsubscribers.append(lambda: [cancel() for cancel in tuple(expiry_cancellers.values())])
     return unsubscribers
