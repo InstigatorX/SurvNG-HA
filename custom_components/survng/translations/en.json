@@ -1,4 +1,5 @@
 {
+  "options": {"step": {"init": {"title": "SurvNG options", "data": {"scan_interval": "Reconciliation interval (seconds)", "stream_source": "Preferred stream"}, "data_description": {"stream_source": "Live uses the camera substream when configured; Main uses the high-resolution stream."}}}},
   "config": {
     "step": {
       "user": {"title": "Connect to SurvNG", "description": "Create a read + camera-control token in SurvNG Admin > General > API.", "data": {"url": "SurvNG URL", "api_token": "API token", "verify_ssl": "Verify TLS certificate", "mqtt_prefix": "MQTT topic prefix"}},

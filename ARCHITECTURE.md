@@ -171,9 +171,10 @@ The first flow collects:
 - MQTT topic prefix when MQTT is enabled.
 
 Validation calls `/api/system/status`, `/api/cameras`, and a read-only stream
-descriptor, verifies JSON schemas, distinguishes bad credentials from missing
-scopes, and tests one snapshot only when a running camera exists. A camera being
-offline must not invalidate an otherwise valid server entry.
+descriptor, verifies JSON schemas, and distinguishes rejected credentials from
+connection failures. SurvNG does not expose a non-mutating scope-introspection
+endpoint, so `camera:control` is verified on the first control operation. A
+camera being offline must not invalidate an otherwise valid server entry.
 
 The options flow controls reconciliation interval, preferred stream and
 optional entity families. `401` and `403` initiate reauthentication. Reconfigure

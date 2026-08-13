@@ -48,6 +48,17 @@ class SurvNGApiClient:
     def url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    @staticmethod
+    async def _read_bounded(response: ClientResponse, limit: int) -> bytes:
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in response.content.iter_chunked(64 * 1024):
+            size += len(chunk)
+            if size > limit:
+                raise SurvNGPayloadError("SurvNG response is too large")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
     async def _response(self, method: str, path: str, **kwargs: Any) -> ClientResponse:
         try:
             response = await self._session.request(
@@ -71,9 +82,7 @@ class SurvNGApiClient:
     async def _json(self, method: str, path: str, **kwargs: Any) -> Any:
         response = await self._response(method, path, **kwargs)
         try:
-            body = await response.content.read(MAX_JSON_BYTES + 1)
-            if len(body) > MAX_JSON_BYTES:
-                raise SurvNGPayloadError("SurvNG JSON response is too large")
+            body = await self._read_bounded(response, MAX_JSON_BYTES)
             return json.loads(body)
         except (ValueError, UnicodeDecodeError) as error:
             raise SurvNGPayloadError("SurvNG returned malformed JSON") from error
@@ -95,9 +104,7 @@ class SurvNGApiClient:
             params={"source": source},
         )
         try:
-            body = await response.content.read(MAX_IMAGE_BYTES + 1)
-            if len(body) > MAX_IMAGE_BYTES:
-                raise SurvNGPayloadError("SurvNG snapshot is too large")
+            body = await self._read_bounded(response, MAX_IMAGE_BYTES)
             if not body:
                 raise SurvNGPayloadError("SurvNG returned an empty snapshot")
             return body
