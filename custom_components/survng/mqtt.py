@@ -83,7 +83,7 @@ async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator
         expiry_cancellers.pop(topic, None)
         coordinator.async_update_listeners()
 
-    async def receive(message: Any) -> None:
+    def receive(message: Any) -> None:
         if state.update(message.topic, message.payload, prefix):
             coordinator.async_update_listeners()
             if message.topic.endswith("/motion") or message.topic.endswith("/object"):

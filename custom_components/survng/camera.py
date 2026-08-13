@@ -28,7 +28,6 @@ class SurvNGCamera(SurvNGEntity, Camera):
     _attr_is_streaming = True
 
     def __init__(self, coordinator, camera_id: str) -> None:
-        Camera.__init__(self)
         SurvNGEntity.__init__(self, coordinator, camera_id)
         self._attr_unique_id = camera_id
 
