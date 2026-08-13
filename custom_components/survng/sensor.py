@@ -24,7 +24,14 @@ SERVER_SENSORS = (
 
 
 async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) -> None:
-    async_add_entities([SurvNGServerSensor(entry.runtime_data.coordinator, item) for item in SERVER_SENSORS])
+    coordinator = entry.runtime_data.coordinator
+    async_add_entities([SurvNGServerSensor(coordinator, item) for item in SERVER_SENSORS])
+    from .platform import setup_dynamic_camera_entities
+    unsubscribe = setup_dynamic_camera_entities(
+        coordinator, async_add_entities,
+        lambda camera_id: [SurvNGLastObjects(coordinator, entry.runtime_data.mqtt, camera_id)],
+    )
+    entry.async_on_unload(unsubscribe)
 
 
 class SurvNGServerSensor(SurvNGEntity, SensorEntity):
@@ -37,3 +44,15 @@ class SurvNGServerSensor(SurvNGEntity, SensorEntity):
     def native_value(self):
         return self.entity_description.value_fn(self.coordinator.data.server)
 
+
+class SurvNGLastObjects(SurvNGEntity, SensorEntity):
+    _attr_name = "Last objects"
+
+    def __init__(self, coordinator, mqtt, camera_id: str) -> None:
+        super().__init__(coordinator, camera_id)
+        self.mqtt = mqtt
+        self._attr_unique_id = f"{camera_id}_last_objects"
+
+    @property
+    def native_value(self):
+        return ", ".join(self.mqtt.objects.get(self.camera_id, ())) or None
