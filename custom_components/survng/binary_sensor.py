@@ -57,7 +57,7 @@ class SurvNGZoneObjectSensor(SurvNGEntity, BinarySensorEntity):
         super().__init__(coordinator, camera_id)
         self.mqtt = mqtt
         self.zone = zone
-        self._attr_name = f"{zone} object"
+        self._attr_name = f"Zone - {zone}"
         self._attr_unique_id = f"{camera_id}_zone_{_zone_slug(zone)}_object"
 
     @property
