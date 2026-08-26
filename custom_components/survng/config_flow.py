@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError, SurvNGTLSError
 from .const import (
     CONF_API_TOKEN,
+    CONF_ALLOW_INSECURE_HTTP,
     CONF_MQTT_PREFIX,
     CONF_SCAN_INTERVAL,
     CONF_STREAM_SOURCE,
@@ -22,7 +23,7 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
-from .urls import normalize_base_url
+from .urls import require_secure_transport
 
 
 class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -36,7 +37,10 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input:
             try:
-                url = normalize_base_url(user_input[CONF_URL])
+                url = require_secure_transport(
+                    user_input[CONF_URL],
+                    user_input[CONF_ALLOW_INSECURE_HTTP],
+                )
                 client = SurvNGApiClient(
                     async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]),
                     url, user_input.get(CONF_API_TOKEN, ""),
@@ -55,9 +59,10 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (SurvNGError, ValueError):
                 errors["base"] = "cannot_connect"
         schema = vol.Schema({
-            vol.Required(CONF_URL, default="http://survng.local:8088/survng"): str,
+            vol.Required(CONF_URL, default="https://survng.local:8088/survng"): str,
             vol.Required(CONF_API_TOKEN): str,
             vol.Required(CONF_VERIFY_SSL, default=True): bool,
+            vol.Required(CONF_ALLOW_INSECURE_HTTP, default=False): bool,
             vol.Required(CONF_MQTT_PREFIX, default=DEFAULT_MQTT_PREFIX): str,
         })
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -95,7 +100,10 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input:
             try:
-                url = normalize_base_url(user_input[CONF_URL])
+                url = require_secure_transport(
+                    user_input[CONF_URL],
+                    user_input[CONF_ALLOW_INSECURE_HTTP],
+                )
                 client = SurvNGApiClient(
                     async_get_clientsession(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL]),
                     url, entry.data[CONF_API_TOKEN],
@@ -114,6 +122,7 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({
             vol.Required(CONF_URL, default=entry.data[CONF_URL]): str,
             vol.Required(CONF_VERIFY_SSL, default=entry.data.get(CONF_VERIFY_SSL, True)): bool,
+            vol.Required(CONF_ALLOW_INSECURE_HTTP, default=entry.data.get(CONF_ALLOW_INSECURE_HTTP, False)): bool,
             vol.Required(CONF_MQTT_PREFIX, default=entry.data.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX)): str,
         }), errors=errors)
 

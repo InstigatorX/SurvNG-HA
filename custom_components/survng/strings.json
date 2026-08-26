@@ -3,9 +3,9 @@
   "issues": {"legacy_mqtt_discovery": {"title": "Disable duplicate SurvNG MQTT discovery", "description": "{entry_title} is publishing legacy Home Assistant MQTT discovery while the SurvNG integration owns the same devices. Disable Home Assistant Discovery in SurvNG Admin > General > API, then remove the duplicate MQTT-discovered entities."}},
   "config": {
     "step": {
-      "user": {"title": "Connect to SurvNG", "description": "Create a read + camera-control token in SurvNG Admin > General > API.", "data": {"url": "SurvNG URL", "api_token": "API token", "verify_ssl": "Verify TLS certificate", "mqtt_prefix": "MQTT topic prefix"}},
+      "user": {"title": "Connect to SurvNG", "description": "Create a read + camera-control token in SurvNG Admin > General > API. HTTPS is required unless you explicitly allow insecure HTTP for a trusted local network.", "data": {"url": "SurvNG URL", "api_token": "API token", "verify_ssl": "Verify TLS certificate", "allow_insecure_http": "Allow insecure HTTP", "mqtt_prefix": "MQTT topic prefix"}},
       "reauth_confirm": {"title": "Update SurvNG API token", "data": {"api_token": "API token"}},
-      "reconfigure": {"title": "Reconfigure SurvNG", "data": {"url": "SurvNG URL", "verify_ssl": "Verify TLS certificate", "mqtt_prefix": "MQTT topic prefix"}}
+      "reconfigure": {"title": "Reconfigure SurvNG", "data": {"url": "SurvNG URL", "verify_ssl": "Verify TLS certificate", "allow_insecure_http": "Allow insecure HTTP", "mqtt_prefix": "MQTT topic prefix"}}
     },
     "error": {"cannot_connect": "Unable to connect to SurvNG", "tls_error": "SurvNG's TLS certificate could not be verified. Install the issuing CA in Home Assistant or disable TLS verification only for a trusted private network.", "invalid_auth": "The API token is invalid or lacks required scopes"},
     "abort": {"already_configured": "This SurvNG server is already configured", "reauth_successful": "Authentication updated"}

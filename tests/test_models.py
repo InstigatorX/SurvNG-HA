@@ -20,10 +20,21 @@ ServerStatus = models.ServerStatus
 StreamSource = models.StreamSource
 Incident = models.Incident
 normalize_base_url = urls.normalize_base_url
+require_secure_transport = urls.require_secure_transport
 
 
 def test_normalize_base_url_preserves_subpath() -> None:
     assert normalize_base_url("https://ha.example/survng/") == "https://ha.example/survng"
+
+
+def test_http_requires_explicit_insecure_transport_opt_in() -> None:
+    try:
+        require_secure_transport("http://survng.local:8088/survng", False)
+    except ValueError as error:
+        assert "HTTPS is required" in str(error)
+    else:
+        raise AssertionError("HTTP was accepted without an explicit opt-in")
+    assert require_secure_transport("http://survng.local:8088/survng", True) == "http://survng.local:8088/survng"
 
 
 def test_typed_contracts() -> None:
