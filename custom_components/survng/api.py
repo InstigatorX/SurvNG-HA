@@ -7,7 +7,14 @@ import json
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
-from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
+from aiohttp import (
+    ClientConnectorCertificateError,
+    ClientConnectorSSLError,
+    ClientError,
+    ClientResponse,
+    ClientSession,
+    ClientTimeout,
+)
 
 from .models import CameraStatus, Incident, ServerStatus, StreamSource, SurvNGPayloadError
 from .urls import normalize_base_url
@@ -26,6 +33,10 @@ class SurvNGAuthError(SurvNGError):
 
 class SurvNGConnectionError(SurvNGError):
     """The server could not be reached."""
+
+
+class SurvNGTLSError(SurvNGConnectionError):
+    """TLS certificate validation failed while connecting to the server."""
 
 
 class SurvNGUnavailableError(SurvNGError):
@@ -66,6 +77,10 @@ class SurvNGApiClient:
                 method, self.url(path), headers=self.headers,
                 timeout=request_timeout, **kwargs,
             )
+        except (ClientConnectorCertificateError, ClientConnectorSSLError) as error:
+            raise SurvNGTLSError(
+                "Unable to verify SurvNG's TLS certificate; check the certificate or disable TLS verification for a trusted private CA"
+            ) from error
         except (ClientError, TimeoutError) as error:
             raise SurvNGConnectionError("Unable to connect to SurvNG") from error
         if response.status in {401, 403}:

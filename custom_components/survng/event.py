@@ -55,7 +55,6 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
                 "created_at": incident.created_at,
                 "trigger_source": incident.trigger_source,
                 "event_url": f"{entry.data['url']}/incidents?event={event_id}" if event_id else entry.data["url"] + "/incidents",
-                "snapshot_url": f"{entry.data['url']}/api/events/{event_id}/snapshot.jpg" if event_id else None,
             }
             entity = entities.get(incident.camera_id)
             if entity:

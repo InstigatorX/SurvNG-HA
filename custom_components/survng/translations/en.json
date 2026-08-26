@@ -7,7 +7,7 @@
       "reauth_confirm": {"title": "Update SurvNG API token", "data": {"api_token": "API token"}},
       "reconfigure": {"title": "Reconfigure SurvNG", "data": {"url": "SurvNG URL", "verify_ssl": "Verify TLS certificate", "mqtt_prefix": "MQTT topic prefix"}}
     },
-    "error": {"cannot_connect": "Unable to connect to SurvNG", "invalid_auth": "The API token is invalid or lacks required scopes"},
+    "error": {"cannot_connect": "Unable to connect to SurvNG", "tls_error": "SurvNG's TLS certificate could not be verified. Install the issuing CA in Home Assistant or disable TLS verification only for a trusted private network.", "invalid_auth": "The API token is invalid or lacks required scopes"},
     "abort": {"already_configured": "This SurvNG server is already configured", "reauth_successful": "Authentication updated"}
   }
 }

@@ -9,7 +9,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_URL, CONF_VERIFY_SSL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError
+from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError, SurvNGTLSError
 from .const import (
     CONF_API_TOKEN,
     CONF_MQTT_PREFIX,
@@ -50,6 +50,8 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             except SurvNGAuthError:
                 errors["base"] = "invalid_auth"
+            except SurvNGTLSError:
+                errors["base"] = "tls_error"
             except (SurvNGError, ValueError):
                 errors["base"] = "cannot_connect"
         schema = vol.Schema({
@@ -79,6 +81,8 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             except SurvNGAuthError:
                 errors["base"] = "invalid_auth"
+            except SurvNGTLSError:
+                errors["base"] = "tls_error"
             except SurvNGError:
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
@@ -103,6 +107,8 @@ class SurvNGConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(entry, data_updates={**user_input, CONF_URL: url})
             except SurvNGAuthError:
                 errors["base"] = "invalid_auth"
+            except SurvNGTLSError:
+                errors["base"] = "tls_error"
             except (SurvNGError, ValueError):
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({

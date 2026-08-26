@@ -6,8 +6,9 @@ streams, controls, activity state and incident automations.
 ## Prerequisites
 
 - Home Assistant 2025.12 or newer.
-- A reachable SurvNG URL including its base path, normally
-  `http://SERVER:8088/survng`.
+- A reachable SurvNG URL including its base path. Use the HTTPS endpoint when
+  TLS is enabled, for example `https://survng.example.com/survng` (or
+  `https://SERVER:8088/survng` for direct access).
 - A SurvNG API token with `read` and `camera:control` scopes. Create it in
   **SurvNG → Admin → General → API** and copy the secret when shown.
 - Home Assistant MQTT configured if push motion, object and incident events are
@@ -32,13 +33,21 @@ descriptor and default to the live/substream. Change the stream or polling
 interval in integration options.
 
 Each incident fires a `survng_incident` Home Assistant event containing stable
-incident/camera/event IDs, lifecycle state, classes, zones and direct SurvNG
-links. Image bytes and credentials are never placed on MQTT or the event bus.
+incident/camera/event IDs, lifecycle state, classes, zones and a link to the
+incident page. The page link is intentionally not a direct snapshot API URL:
+snapshot endpoints require the bearer token and cannot be safely opened from an
+event payload. Image bytes and credentials are never placed on MQTT or the
+event bus.
 
 ## Troubleshooting
 
 - **Invalid authentication:** create a replacement token with both `read` and
   `camera:control`, then use Home Assistant's reauthentication prompt.
+- **TLS certificate error:** Home Assistant verifies HTTPS certificates by
+  default. Install the CA that issued a private/self-signed SurvNG certificate
+  in the Home Assistant host/container, then keep **Verify TLS certificate**
+  enabled. Disable it only on a trusted private network when installing the CA
+  is not practical; this weakens protection against man-in-the-middle attacks.
 - **Still image works but video does not:** verify Home Assistant can reach the
   RTSP address returned by SurvNG's go2rtc stream-source endpoint.
 - **Duplicate devices:** disable legacy MQTT discovery in SurvNG and remove its

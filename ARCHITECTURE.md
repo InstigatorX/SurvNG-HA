@@ -4,9 +4,10 @@ Status: phases 1–6 implemented; Home Assistant installation acceptance pending
 
 ## Verified SurvNG contracts
 
-SurvNG currently exposes an HTTP API under its configured base path (normally
+SurvNG exposes an HTTP or HTTPS API under its configured base path (normally
 `/survng`). The custom integration must store the complete base URL, including
-that path, and append the paths below.
+that path, and append the paths below. HTTPS certificate verification is on by
+default; Home Assistant must trust the issuing CA.
 
 | Purpose | Method and path | Verified behavior |
 | --- | --- | --- |
@@ -40,7 +41,7 @@ unnecessarily privileged. The integration always requires a token so enabling
 SurvNG enforcement later cannot unexpectedly disconnect an entry created in a
 temporary trusted-LAN mode.
 
-Every HTTP, image and SSE request uses the same bearer header. The token is
+Every HTTP(S), image and SSE request uses the same bearer header. The token is
 stored only in the Home Assistant config entry and is never copied into URLs,
 entity attributes, logs, issue details or diagnostics. A `401` or `403` starts
 Home Assistant reauthentication.
