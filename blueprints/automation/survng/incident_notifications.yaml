@@ -1,0 +1,80 @@
+blueprint:
+  name: SurvNG incident notifications
+  description: >-
+    Native SurvNG notifications with incident images, recognized people, and
+    lifecycle updates. MQTT is not required. Each incident replaces its own
+    notification. Initial text arrives immediately; its image follows when ready.
+  domain: automation
+  input:
+    notify_action:
+      name: Notification action
+      description: Your mobile app notification action, for example notify.mobile_app_my_phone.
+      selector:
+        text:
+    camera_ids:
+      name: Camera IDs
+      description: Optional comma-separated SurvNG camera IDs. Leave blank for all cameras.
+      default: ""
+      selector:
+        text:
+    object_classes:
+      name: Object classes
+      description: Optional comma-separated classes, such as person,car. Leave blank for all activity.
+      default: ""
+      selector:
+        text:
+    lifecycle_states:
+      name: Incident stages
+      default: [new, updated, complete]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Initial detection
+              value: new
+            - label: Updates
+              value: updated
+            - label: Completion
+              value: complete
+    open_url:
+      name: Open URL override
+      description: Optional HA dashboard path or externally reachable URL. Defaults to the SurvNG incident page.
+      default: ""
+      selector:
+        text:
+mode: queued
+max: 50
+variables:
+  selected_cameras: !input camera_ids
+  selected_classes: !input object_classes
+  selected_states: !input lifecycle_states
+  open_override: !input open_url
+triggers:
+  - trigger: event
+    event_type: survng_incident
+conditions:
+  - condition: template
+    value_template: >-
+      {% set e = trigger.event.data %}
+      {% set cameras = selected_cameras.split(',') | map('trim') | reject('equalto', '') | list %}
+      {% set classes = selected_classes.split(',') | map('trim') | reject('equalto', '') | list %}
+      {{ not e.get('reconciled', false)
+         and e.state in selected_states
+         and (not cameras or e.camera_id in cameras)
+         and (not classes or e.classes | select('in', classes) | list | length > 0) }}
+actions:
+  - variables:
+      incident: "{{ trigger.event.data }}"
+      destination: "{{ open_override or trigger.event.data.event_url }}"
+      notification_data: >-
+        {% set initial = incident.state == 'new' and incident.delivery == 'lifecycle' %}
+        {% set result = dict(tag=incident.notification_tag,
+                             alert_once=true, url=destination, clickAction=destination,
+                             push=dict(sound='default' if initial else 'none'),
+                             actions=[dict(action='URI', title='View incident', uri=destination)]) %}
+        {{ dict(result, image=incident.image_url) if incident.get('image_url') else result }}
+  - action: !input notify_action
+    data:
+      title: "{{ incident.title }}"
+      message: "{{ incident.summary }}{{ ' Incident complete.' if incident.state == 'complete' else '' }}"
+      data: "{{ notification_data }}"

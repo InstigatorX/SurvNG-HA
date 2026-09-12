@@ -1,4 +1,5 @@
 {
+  "entity": {"event": {"incident": {"name": "Incident", "state_attributes": {"event_type": {"state": {"new": "Incident detected", "updated": "Incident updated", "complete": "Incident complete"}}}}}},
   "options": {"step": {"init": {"title": "SurvNG options", "data": {"scan_interval": "Reconciliation interval (seconds)", "stream_source": "Preferred stream"}, "data_description": {"stream_source": "Live uses the camera substream when configured; Main uses the high-resolution stream."}}}},
   "issues": {"legacy_mqtt_discovery": {"title": "Disable duplicate SurvNG MQTT discovery", "description": "{entry_title} is publishing legacy Home Assistant MQTT discovery while the SurvNG integration owns the same devices. Disable Home Assistant Discovery in SurvNG Admin > General > API, then remove the duplicate MQTT-discovered entities."}},
   "config": {

@@ -147,6 +147,23 @@ class Incident:
     zones: tuple[str, ...]
     created_at: str
     trigger_source: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def revision(self) -> int:
+        return int(self.details.get("revision", 0))
+
+    def event_data(self, base_url: str) -> dict[str, Any]:
+        event_id = self.representative_event_id
+        return {
+            **self.details,
+            "incident_id": self.incident_id, "camera_id": self.camera_id,
+            "state": self.state, "event_ids": list(self.event_ids),
+            "representative_event_id": event_id, "classes": list(self.classes),
+            "zones": list(self.zones), "created_at": self.created_at,
+            "trigger_source": self.trigger_source,
+            "event_url": f"{base_url}/incidents?event_ids={event_id}" if event_id else f"{base_url}/incidents",
+        }
 
     @classmethod
     def from_payload(cls, payload: object) -> Incident:
@@ -167,6 +184,13 @@ class Incident:
             zones=tuple(str(value) for value in data.get("zones", []) if value),
             created_at=str(data.get("started_at") or data.get("created_at") or ""),
             trigger_source=str(data.get("trigger_source") or ""),
+            details={key: data[key] for key in (
+                "schema_version", "revision", "camera_name", "title", "summary",
+                "objects", "identities", "people", "camera_semantics", "started_at",
+                "last_activity_at", "completed_at", "updated_at", "duration_seconds",
+                "event_count", "has_objects", "image_available", "image_revision",
+                "initial_event_id", "initial_image_available", "changed_fields",
+            ) if key in data},
         )
 
     @classmethod

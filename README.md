@@ -12,8 +12,10 @@ streams, controls, activity state and incident automations.
   `https://SERVER:8088/survng` for direct access).
 - A SurvNG API token with `read` and `camera:control` scopes. Create it in
   **SurvNG → Admin → General → API** and copy the secret when shown.
-- Home Assistant MQTT configured if push motion, object and incident events are
-  desired. Cameras, snapshots, streams and controls still work through HTTP.
+- SurvNG with native incident notification schema 2 support (update both server
+  and integration together). MQTT is optional for motion/object activity overlays;
+  incident notifications do not require MQTT.
+- A configured Home Assistant local media directory for notification attachments.
 
 Disable SurvNG's legacy Home Assistant MQTT discovery before enabling this
 integration, otherwise Home Assistant will show duplicate devices.
@@ -28,21 +30,89 @@ token. HACS custom-repository installation can use this repository's root.
 ## Behavior
 
 HTTP polling every 30 seconds reconciles authoritative server and camera state.
-MQTT supplies low-latency motion, object and incident transitions. Clean camera
-images are fetched on demand; live streams use SurvNG's credential-safe go2rtc
-descriptor and default to the live/substream. Change the stream or polling
-interval in integration options.
+An authenticated native event stream supplies incident lifecycle notifications.
+Optional MQTT supplies motion/object activity overlays. Clean camera images are
+fetched on demand; live streams use SurvNG's credential-safe go2rtc descriptor.
 
-Each incident fires a `survng_incident` Home Assistant event containing stable
-incident/camera/event IDs, lifecycle state, classes, zones and a link to the
-incident page. HTTP reconciliation reports incidents as `updated`; MQTT supplies
-the authoritative `new`, `updated` and `complete` lifecycle transitions.
-The recording switch shows whether recording is enabled, even while a camera
-is powered off or its recorder is restarting. The page link is intentionally not
-a direct snapshot API URL:
-snapshot endpoints require the bearer token and cannot be safely opened from an
-event payload. Image bytes and credentials are never placed on MQTT or the
-event bus.
+Each incident updates its camera's event entity and fires `survng_incident` with:
+
+- Stable `incident_id`, `camera_id`, `server_id`, `notification_tag`, and `revision`.
+- `state`: `new`, `updated`, or `complete`; readable `title` and factual `summary`.
+- `objects` (class, confidence, zones, observation count), `people`, and `identities`
+  (recognition confidence/status). Observation counts are not unique person counts.
+- `started_at`, `last_activity_at`, `completed_at`, and `duration_seconds`.
+- `image_url`, `initial_image_url`, `final_image_url`, `image_pending`, and
+  `image_available`. These are authenticated HA media URLs, not SurvNG credentials.
+- `event_url`, `changed_fields`, and `delivery` (`lifecycle` or `image`).
+
+Text is delivered immediately. Image download completion fires another event
+with the same incident revision and notification tag, with `delivery: image`.
+`initial_image_url` preserves the first image fetched during live delivery;
+`final_image_url` is supplied once a completed revision's image is fetched.
+A cover is fetched from the representative event at download time; a delayed
+fetch can therefore see a refinement that already replaced the original cover.
+Cached attachment files themselves are immutable per revision. Images are limited
+to 10 MiB each; the per-entry cache retains at most 512 files / 128 MiB / seven
+days, with cleanup when new images arrive. Older attachment links may expire.
+Images unavailable during a storage/network outage do not prevent text delivery.
+
+Reconnect uses the last processed stream cursor. SurvNG journals recent lifecycle
+state in its local database directory, allowing a recovery snapshot after server
+restart or replay-history expiry. Revisions suppress duplicate delivery. The
+first connection after HA setup/reload populates event entities without sending
+historical notifications; later reconnects deliver changed/missed incidents.
+Recovery history retains active incidents and the latest 256 completed groups.
+Incidents outside that retained window cannot be recovered by this stream.
+
+The event entity's “What happened” value identifies the lifecycle stage; its
+`summary` attribute describes the detections. For notification automations, use
+`survng_incident` rather than entity state changes, which also reflect baseline
+reconciliation.
+
+## Node-RED notifications
+
+Use the Home Assistant WebSocket nodes in Node-RED; no MQTT node is required:
+
+1. Add **Events: all**, select your HA server, and set **Event Type** to
+   `survng_incident`. Set its **event data** output to `msg.payload`.
+2. Add a **Function** node with [the notification mapper](examples/node-red-notification.js).
+   Add camera/class/person/zone filters before the notification mapping as desired.
+3. Add a Home Assistant **Action** node, select your `notify.mobile_app_*` action,
+   and set **Data** to the JSONata expression `notification`. This reads the
+   object prepared in `msg.notification`; no JSON string interpolation is needed.
+4. Use a Debug node on `msg.incident` to inspect the full detection information.
+
+Both lifecycle and image deliveries matter: an image delivery can share the same
+`revision` as its preceding text delivery. Do not discard it merely because the
+revision matches. Use `notification_tag` for replacement, and if your flow adds
+its own deduplication, include `delivery` and `image_url` alongside the revision.
+
+The HA integration repairs its connection to SurvNG. A separate Node-RED-to-HA
+WebSocket outage can still miss event-bus messages; those messages are not a
+persistent notification queue. Node-RED can inspect the latest incident entity
+attributes on reconnect if your flow needs additional reconciliation.
+
+The [Events: all](https://zachowj.github.io/node-red-contrib-home-assistant-websocket/node/events-all.html)
+and [Action](https://zachowj.github.io/node-red-contrib-home-assistant-websocket/node/action.html)
+node documentation describes these settings. The flow remains yours to route
+notifications, select devices, and apply presence or time-of-day rules.
+
+## Device notifications
+
+Copy `blueprints/automation/survng/incident_notifications.yaml` into the matching
+Home Assistant blueprints directory, reload automations, and create an automation
+from **SurvNG incident notifications**. Select your `notify.mobile_app_*` action;
+optionally filter cameras, classes, and stages. The blueprint replaces one
+notification per incident and requests quiet image/lifecycle updates.
+
+HA must be reachable by the Companion app for attachments to load away from home.
+The default click target is the configured SurvNG incident URL; use the blueprint's
+URL override for a HA dashboard or externally reachable destination if needed.
+
+The attachment and replacement behavior follows the Companion app's
+[attachment](https://companion.home-assistant.io/docs/notifications/notification-attachments/)
+and [notification](https://companion.home-assistant.io/docs/notifications/notifications-basic/)
+contracts. Actual phone delivery still needs acceptance testing on your devices.
 
 ## Troubleshooting
 
@@ -60,5 +130,5 @@ event bus.
 - **Camera unavailable:** camera power and current-frame availability are
   independent of the SurvNG server's overall availability.
 
-Removing the config entry unsubscribes MQTT listeners and unloads every entity
-platform. Removing files alone is not sufficient; remove the entry first.
+Removing the config entry stops the native stream and image tasks, unsubscribes
+optional MQTT listeners, and unloads every entity platform. Removing files alone is not sufficient; remove the entry first.

@@ -10,6 +10,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import SurvNGApiClient
 from .const import CONF_API_TOKEN, PLATFORMS
 from .coordinator import SurvNGCoordinator
+from .incidents import NativeIncidents
 from .mqtt import SurvNGMqttState, async_subscribe_state
 from .repairs import update_legacy_discovery_issue
 
@@ -20,6 +21,7 @@ class SurvNGRuntimeData:
     coordinator: SurvNGCoordinator
     mqtt: SurvNGMqttState
     mqtt_unsubscribers: list
+    incidents: NativeIncidents
 
 
 type SurvNGConfigEntry = ConfigEntry[SurvNGRuntimeData]
@@ -33,12 +35,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> bo
     coordinator = SurvNGCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
     mqtt_state = SurvNGMqttState()
-    entry.runtime_data = SurvNGRuntimeData(client, coordinator, mqtt_state, [])
+    entry.runtime_data = SurvNGRuntimeData(client, coordinator, mqtt_state, [], NativeIncidents(hass, entry, client))
     update_legacy_discovery_issue(hass, entry, coordinator.data.server.mqtt)
     entry.runtime_data.mqtt_unsubscribers.extend(
         await async_subscribe_state(hass, entry, mqtt_state, coordinator)
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.runtime_data.incidents.start()
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
@@ -50,6 +53,7 @@ async def _async_reload_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.incidents.stop()
         for unsubscribe in entry.runtime_data.mqtt_unsubscribers:
             unsubscribe()
         entry.runtime_data.mqtt_unsubscribers.clear()

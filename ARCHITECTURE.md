@@ -14,7 +14,7 @@ default; Home Assistant must trust the issuing CA.
 | Camera inventory and runtime state | `GET /api/cameras` | Returns one runtime-status object per stable camera ID. Includes display name, running/connected/fresh-frame state, detection state, recording state, capture health, stream dimensions, ONVIF state, and motion/tracking diagnostics. |
 | Server health | `GET /api/system/status` | Returns process instance ID, CPU and application memory, storage, detector, aggregate camera counts, MQTT, go2rtc, and camera-startup status. |
 | Integration authentication | `Authorization: Bearer <token>` | Native scoped long-lived tokens. `read` covers inventory, status, snapshots, streams and events; `camera:control` covers power, recording and detection changes; `admin` includes every scope but is not needed by this integration. |
-| Optional event stream | `GET /api/events/stream` | Server-sent event stream. Emits initial camera/system snapshots when replay is unavailable, then typed application events. The first integration release deliberately uses bounded HTTP reconciliation plus optional MQTT instead of adding a third long-lived transport owner. |
+| Native incident stream | `GET /api/events/stream?incidents_only=1` | Authenticated SSE with a lifecycle baseline, replay cursor, and schema 2 `incident_lifecycle` revisions. The application owns settlement and recovery independently of MQTT. |
 | Clean current image | `GET /api/cameras/{camera_id}/snapshot.jpg?source=live|main` | Returns a clean JPEG with `Cache-Control: no-store`; `404` for an unknown camera and `503` for a powered-off camera or unavailable frame. |
 | Stream metadata | `GET /api/cameras/{camera_id}/live-info?source=live|main` | Returns go2rtc availability, stream name, codec list, delivery and transcoding state. It currently also returns an internal go2rtc host. |
 | Stable stream source | `GET /api/cameras/{camera_id}/stream-source?source=live|main` | Returns a versioned, credential-safe, FFmpeg-readable go2rtc RTSP descriptor. The integration consumes the returned URL but never exposes it as entity state or diagnostics. |
@@ -62,8 +62,8 @@ identity, then migrate to a server UUID when available.
 ## Ownership decision
 
 The custom integration should own all Home Assistant SurvNG entities. It should
-use SurvNG MQTT as a push transport, not rely on SurvNG's existing MQTT
-discovery payloads.
+use the authenticated native incident stream for notifications. Optional MQTT
+activity overlays do not own incident delivery or entity discovery.
 
 Running both ownership models creates duplicate devices, switches, binary
 sensors and state histories. Setup should detect or clearly warn when SurvNG
@@ -72,8 +72,9 @@ discovery after the custom integration is installed. Existing retained
 discovery topics need a documented one-time cleanup path.
 
 HTTP remains authoritative for inventory, snapshots, health reconciliation and
-commands. MQTT provides low-latency state and incidents. Periodic HTTP refresh
-repairs missed MQTT messages and startup ordering races.
+commands. Native SSE owns incident delivery and replay; a local SurvNG journal
+retains active and recent completed incidents across process restarts. Optional
+MQTT provides activity overlays. See README for notification and retention semantics.
 
 ## Proposed integration structure
 
@@ -88,6 +89,9 @@ custom_components/survng/
   diagnostics.py
   entity.py
   event.py
+  event_stream.py
+  incidents.py
+  incident_images.py
   manifest.json
   models.py
   repairs.py
@@ -103,7 +107,7 @@ Home Assistant `aiohttp` session. It owns bounded HTTP timeouts, response schema
 validation and exception translation, but no entity state.
 
 `models.py` contains frozen typed records for server status, camera status and
-incident messages. HTTP and MQTT payloads are treated as untrusted and parsed
+incident messages. HTTP, SSE and MQTT payloads are treated as untrusted and parsed
 at this boundary.
 
 `coordinator.py` owns slow reconciliation only: camera inventory, server health
@@ -113,8 +117,8 @@ in-memory records and request listener refreshes without causing an immediate
 HTTP poll for every event.
 
 The typed config-entry `runtime_data` owns exactly one API client, coordinator,
-MQTT unsubscribe collection and dynamically managed entity registry. Entry
-unload cancels refreshes, unsubscribes MQTT listeners and unloads every
+native incident stream/image tasks, optional MQTT subscriptions and entity registry.
+Entry unload cancels stream/image work, unsubscribes listeners and unloads every
 platform. The shared Home Assistant HTTP and MQTT clients are not closed by the
 integration.
 
@@ -148,20 +152,19 @@ and stream failure does not prevent still images.
 
 ## Events and incidents
 
-Subscribe through Home Assistant's MQTT integration to the configured SurvNG
-incident topic. Emit both:
+Subscribe directly to SurvNG's authenticated SSE incident lifecycle. Emit both
+an event entity for the latest camera transition and `survng_incident` bus events
+for Node-RED and optional HA automation blueprints. The baseline populates
+entities without notifying the bus; later recovery delivers changed revisions.
 
-- a Home Assistant event entity representing the latest incident transition;
-  and
-- a namespaced `survng_incident` event-bus event for automation compatibility.
+Payloads include detections, identities, summary, lifecycle/revision, timestamps,
+and links. Images are fetched separately with the stored API token and cached
+in authenticated HA media storage. Image delivery enriches the same revision;
+consumers must distinguish `delivery: lifecycle` from `delivery: image`.
+No image bytes, credentials, or original stream URLs enter the event bus or MQTT.
 
-The bounded event payload contains incident and camera IDs, lifecycle state,
-timestamps, labels, confidence summaries, zones, trigger source when supplied,
-the representative event ID, and URLs relative to the configured SurvNG base
-URL. It never contains image bytes, video, credentials or original stream URLs.
-
-The HTTP incident feed is used at setup/reconnect to reconcile the latest state;
-it is not polled continuously.
+See README for bounded journal/image retention, reconnect behavior, and Node-RED
+handoff. HTTP feed polling is not authoritative for lifecycle completion.
 
 ## Configuration flow
 
@@ -225,7 +228,7 @@ document migration away from legacy discovery-owned entities.
 
 ### Phase 5 — incidents and automations
 
-Add the event entity, incident MQTT subscription, event-bus automation contract,
+Add the event entity, native incident subscription, event-bus automation contract,
 reconnect reconciliation and direct SurvNG links. Test all incident lifecycle
 states, duplicate delivery and malformed payloads.
 

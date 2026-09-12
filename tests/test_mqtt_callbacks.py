@@ -13,6 +13,7 @@ from custom_components.survng.mqtt import SurvNGMqttState, async_subscribe_state
 def test_mqtt_and_expiry_update_all_cameras_on_event_loop(tmp_path) -> None:
     async def run():
         hass = HomeAssistant(str(tmp_path))
+        hass.config.components.add("mqtt")
         loop_thread = threading.get_ident()
         state = SurvNGMqttState()
         entry = SimpleNamespace(data={})
@@ -54,4 +55,12 @@ def test_mqtt_and_expiry_update_all_cameras_on_event_loop(tmp_path) -> None:
                 unsubscribe()
         await hass.async_block_till_done()
 
+    asyncio.run(run())
+
+
+def test_native_setup_does_not_wait_for_an_unconfigured_mqtt_integration(tmp_path) -> None:
+    async def run():
+        hass = HomeAssistant(str(tmp_path))
+        assert await async_subscribe_state(hass, SimpleNamespace(data={}), SurvNGMqttState(), Mock()) == []
+        await hass.async_block_till_done()
     asyncio.run(run())

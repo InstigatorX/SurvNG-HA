@@ -9,48 +9,33 @@ from custom_components.survng.models import Incident
 from custom_components.survng.mqtt import SurvNGMqttState
 
 
-def test_http_reconciliation_preserves_mqtt_lifecycle_and_links() -> None:
-    feed = Incident.from_feed_item({
-        "id": "incident-gate-8", "incident_id": "gate-8", "camera_id": "gate",
-        "representative_event_id": 9, "events": [{"id": 8}, {"id": 9}],
-        "labels": ["car"], "start_at": "2026-09-12T12:00:00Z",
-    })
-    mqtt = SurvNGMqttState()
-    current = Incident.from_payload({
-        "incident_id": "incident-gate-8", "camera_id": "gate", "state": "new",
-        "representative_event_id": 8, "event_ids": [8], "classes": ["car"],
-        "started_at": "2026-09-12T12:00:00Z",
-    })
-    mqtt.incidents[current.incident_id] = current
-    coordinator = SimpleNamespace(
-        data=SimpleNamespace(recent_incidents=(feed,)),
-        async_add_listener=Mock(return_value=lambda: None),
-    )
+def test_native_incidents_publish_rich_events_and_suppress_baseline() -> None:
+    native = SimpleNamespace(incidents={}, subscribe=Mock(return_value=lambda: None))
+    coordinator = SimpleNamespace()
     entry = SimpleNamespace(
-        runtime_data=SimpleNamespace(coordinator=coordinator, mqtt=mqtt),
-        data={"url": "https://survng.example/survng"}, async_on_unload=Mock(),
+        runtime_data=SimpleNamespace(coordinator=coordinator, incidents=native),
+        data={"url": "https://survng.example/survng"}, entry_id="server", async_on_unload=Mock(),
     )
     hass = SimpleNamespace(bus=SimpleNamespace(async_fire=Mock()))
     with patch.object(event, "setup_dynamic_camera_entities", return_value=lambda: None):
         asyncio.run(event.async_setup_entry(hass, entry, Mock()))
-    payload = hass.bus.async_fire.call_args.args[1]
-    assert hass.bus.async_fire.call_count == 1
-    assert payload["state"] == "new"
-    assert payload["incident_id"] == feed.incident_id
-    assert payload["created_at"] == "2026-09-12T12:00:00Z"
-    assert payload["representative_event_id"] == 8
-    assert payload["event_url"] == "https://survng.example/survng/incidents?event_ids=8"
-
-    refresh = coordinator.async_add_listener.call_args.args[0]
-    refresh()
-    assert hass.bus.async_fire.call_count == 1
-    mqtt.incidents[current.incident_id] = Incident.from_payload({
-        "incident_id": current.incident_id, "camera_id": "gate", "state": "complete",
-        "representative_event_id": 9, "event_ids": [8, 9], "classes": ["car"],
+    receive = native.subscribe.call_args.args[0]
+    incident = Incident.from_payload({
+        "incident_id": "incident-gate-8", "camera_id": "gate", "state": "new",
+        "representative_event_id": 8, "event_ids": [8], "classes": ["person"],
+        "revision": 1, "people": ["Alex"], "summary": "Alex detected at Gate.",
+        "objects": [{"label": "person", "confidence": 0.9}],
     })
-    refresh()
-    assert hass.bus.async_fire.call_args.args[1]["state"] == "complete"
-    assert hass.bus.async_fire.call_count == 2
+    receive(incident, False)
+    hass.bus.async_fire.assert_not_called()
+    receive(incident, True)
+    payload = hass.bus.async_fire.call_args.args[1]
+    assert payload["summary"] == "Alex detected at Gate."
+    assert payload["objects"][0]["confidence"] == 0.9
+    assert payload["people"] == ["Alex"]
+    assert payload["notification_tag"] == "survng-server-incident-gate-8"
+    assert payload["event_url"] == "https://survng.example/survng/incidents?event_ids=8"
+    assert payload["reconciled"] is False
 
 
 def test_http_only_reconciliation_does_not_claim_completion() -> None:

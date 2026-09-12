@@ -78,6 +78,8 @@ class SurvNGMqttState:
 
 async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator) -> list:
     """Subscribe when Home Assistant MQTT is available; HTTP still works without it."""
+    if "mqtt" not in hass.config.components:
+        return []
     try:
         from homeassistant.components import mqtt
     except ImportError:
@@ -107,7 +109,7 @@ async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator
                 )
 
     unsubscribers = []
-    for topic in (f"{prefix}/camera/+/motion", f"{prefix}/camera/+/object", f"{prefix}/zone/+/+/object", f"{prefix}/events/incidents"):
+    for topic in (f"{prefix}/camera/+/motion", f"{prefix}/camera/+/object", f"{prefix}/zone/+/+/object"):
         unsubscribers.append(await mqtt.async_subscribe(hass, topic, receive, qos=0, encoding="utf-8"))
     unsubscribers.append(lambda: [cancel() for cancel in tuple(expiry_cancellers.values())])
     return unsubscribers

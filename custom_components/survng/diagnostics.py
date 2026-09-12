@@ -19,6 +19,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
             "cameras_online": data.server.cameras_online,
             "cameras_recording": data.server.cameras_recording,
         },
+        "native_incidents": {
+            "connected": runtime.incidents.connected,
+            "cached_incidents": len(runtime.incidents.incidents),
+        },
         "cameras": [{
             "id": camera.id,
             "name": camera.name,

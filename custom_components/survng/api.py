@@ -16,6 +16,7 @@ from aiohttp import (
     ClientTimeout,
 )
 
+from .event_stream import decode_events
 from .models import CameraStatus, Incident, ServerStatus, StreamSource, SurvNGPayloadError
 from .urls import normalize_base_url
 
@@ -143,6 +144,32 @@ class SurvNGApiClient:
         if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
             raise SurvNGPayloadError("incident feed has no items")
         return tuple(Incident.from_feed_item(item) for item in payload["items"])
+
+    async def incident_events(self, cursor: str = ""):
+        response = await self._response(
+            "GET", "/api/events/stream",
+            params={"incidents_only": "1", "last_event_id": cursor},
+            timeout=ClientTimeout(total=None, connect=5, sock_read=45),
+        )
+        try:
+            if response.content_type != "text/event-stream":
+                raise SurvNGPayloadError("SurvNG did not return an event stream")
+            async for event in decode_events(response.content):
+                yield event
+        except (ClientError, TimeoutError) as error:
+            raise SurvNGConnectionError("SurvNG event stream disconnected") from error
+        finally:
+            response.close()
+
+    async def incident_snapshot(self, event_id: int) -> bytes:
+        response = await self._response("GET", f"/api/events/{int(event_id)}/snapshot.jpg")
+        try:
+            body = await self._read_bounded(response, 10 * 1024 * 1024)
+            if not body.startswith((b"\xff\xd8", b"\x89PNG\r\n\x1a\n")):
+                raise SurvNGPayloadError("SurvNG incident snapshot is not JPEG or PNG")
+            return body
+        finally:
+            response.release()
 
     async def snapshot(self, camera_id: str, source: str = "live") -> bytes:
         response = await self._response(
