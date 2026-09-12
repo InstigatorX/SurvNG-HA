@@ -6,6 +6,7 @@ streams, controls, activity state and incident automations.
 ## Prerequisites
 
 - Home Assistant 2025.12 or newer.
+- SurvNG from the current `v1.2` or `v1.3-gstreamer` branch.
 - A reachable SurvNG URL including its base path. Use the HTTPS endpoint when
   TLS is enabled, for example `https://survng.example.com/survng` (or
   `https://SERVER:8088/survng` for direct access).
@@ -34,7 +35,11 @@ interval in integration options.
 
 Each incident fires a `survng_incident` Home Assistant event containing stable
 incident/camera/event IDs, lifecycle state, classes, zones and a link to the
-incident page. The page link is intentionally not a direct snapshot API URL:
+incident page. HTTP reconciliation reports incidents as `updated`; MQTT supplies
+the authoritative `new`, `updated` and `complete` lifecycle transitions.
+The recording switch shows whether recording is enabled, even while a camera
+is powered off or its recorder is restarting. The page link is intentionally not
+a direct snapshot API URL:
 snapshot endpoints require the bearer token and cannot be safely opened from an
 event payload. Image bytes and credentials are never placed on MQTT or the
 event bus.

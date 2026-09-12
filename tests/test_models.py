@@ -71,9 +71,22 @@ def test_credentials_in_url_are_rejected() -> None:
     raise AssertionError("embedded credentials accepted")
 
 
-def test_incident_feed_item_maps_to_complete_lifecycle() -> None:
+def test_incident_feed_item_maps_to_updated_lifecycle() -> None:
     incident = Incident.from_feed_item({
         "incident_id": "gate-1", "camera_id": "gate", "representative_event_id": 9,
         "events": [{"id": 8}, {"id": 9}], "labels": ["car"], "zones": ["Driveway"],
     })
-    assert incident.state == "complete" and incident.event_ids == (8, 9)
+    assert incident.state == "updated" and incident.event_ids == (8, 9)
+
+
+def test_incident_feed_prefers_mqtt_compatible_identity_and_start_time() -> None:
+    incident = Incident.from_feed_item({
+        "id": "incident-gate-8", "incident_id": "gate-8", "camera_id": "gate",
+        "start_at": "2026-09-12T12:00:00Z", "created_at": "2026-09-12T12:00:10Z",
+    })
+    assert incident.incident_id == "incident-gate-8"
+    assert incident.created_at == "2026-09-12T12:00:00Z"
+
+
+def test_legacy_recording_status_fallback() -> None:
+    assert CameraStatus.from_payload({"id": "gate", "recording": True}).recording_enabled

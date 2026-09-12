@@ -26,20 +26,12 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
     unsubscribe_entities = setup_dynamic_camera_entities(coordinator, async_add_entities, factory)
     seen: dict[str, str] = {}
 
-    lifecycle_rank = {"new": 0, "updated": 1, "complete": 2}
-
-    def merge_reconciled_incident(incident) -> None:
-        current = mqtt.incidents.get(incident.incident_id)
-        if current is None or lifecycle_rank[incident.state] > lifecycle_rank[current.state]:
-            mqtt.incidents[incident.incident_id] = incident
-
-    for incident in coordinator.data.recent_incidents:
-        merge_reconciled_incident(incident)
-
     def publish_incidents() -> None:
-        for incident in coordinator.data.recent_incidents:
-            merge_reconciled_incident(incident)
-        for incident in mqtt.incidents.values():
+        # HTTP reconciles missed observations but cannot establish completion.
+        # MQTT owns lifecycle state whenever it has observed the same incident.
+        incidents = {incident.incident_id: incident for incident in coordinator.data.recent_incidents}
+        incidents.update(mqtt.incidents)
+        for incident in incidents.values():
             identity = repr((incident.state, incident.representative_event_id, incident.event_ids, incident.classes, incident.zones))
             if seen.get(incident.incident_id) == identity:
                 continue
@@ -50,11 +42,12 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
                 "camera_id": incident.camera_id,
                 "state": incident.state,
                 "event_ids": list(incident.event_ids),
+                "representative_event_id": event_id,
                 "classes": list(incident.classes),
                 "zones": list(incident.zones),
                 "created_at": incident.created_at,
                 "trigger_source": incident.trigger_source,
-                "event_url": f"{entry.data['url']}/incidents?event={event_id}" if event_id else entry.data["url"] + "/incidents",
+                "event_url": f"{entry.data['url']}/incidents?event_ids={event_id}" if event_id else entry.data["url"] + "/incidents",
             }
             entity = entities.get(incident.camera_id)
             if entity:
@@ -78,4 +71,6 @@ class SurvNGIncidentEvent(SurvNGEntity, EventEntity):
 
     def emit(self, event_type: str, payload: dict) -> None:
         self._trigger_event(event_type, payload)
-        self.async_write_ha_state()
+        # Initial reconciliation can run before async_add_entities registers us.
+        if self.hass is not None and self.entity_id is not None:
+            self.async_write_ha_state()

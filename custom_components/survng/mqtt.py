@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any
 
 from .models import Incident, SurvNGPayloadError
@@ -83,13 +84,16 @@ async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator
         return []
     prefix = entry.data.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX).strip("/")
 
+    from homeassistant.core import callback
     from homeassistant.helpers.event import async_call_later
     expiry_cancellers: dict[str, Any] = {}
 
+    @callback
     def expire(_now, topic: str) -> None:
         expiry_cancellers.pop(topic, None)
         coordinator.async_update_listeners()
 
+    @callback
     def receive(message: Any) -> None:
         if state.update(message.topic, message.payload, prefix):
             coordinator.async_update_listeners()
@@ -99,7 +103,7 @@ async def async_subscribe_state(hass, entry, state: SurvNGMqttState, coordinator
                     existing()
                 delay = 10 if message.topic.endswith("/motion") else 15
                 expiry_cancellers[message.topic] = async_call_later(
-                    hass, delay, lambda now, topic=message.topic: expire(now, topic),
+                    hass, delay, partial(expire, topic=message.topic),
                 )
 
     unsubscribers = []

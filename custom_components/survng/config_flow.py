@@ -11,8 +11,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError, SurvNGTLSError
 from .const import (
-    CONF_API_TOKEN,
     CONF_ALLOW_INSECURE_HTTP,
+    CONF_API_TOKEN,
     CONF_MQTT_PREFIX,
     CONF_SCAN_INTERVAL,
     CONF_STREAM_SOURCE,

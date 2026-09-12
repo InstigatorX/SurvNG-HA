@@ -36,7 +36,7 @@ class SurvNGCameraSwitch(SurvNGEntity, SwitchEntity):
         camera = self.camera
         return bool(camera and {
             "power": camera.running,
-            "recording": camera.recording,
+            "recording": camera.recording_enabled,
             "detection": camera.detection_enabled,
         }[self.feature])
 

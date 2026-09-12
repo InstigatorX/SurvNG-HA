@@ -84,6 +84,11 @@ class CameraStatus:
     last_motion_at: str
     raw: Mapping[str, Any] = field(repr=False)
 
+    @property
+    def recording_enabled(self) -> bool:
+        """Desired recording state, independent of recorder health or camera power."""
+        return bool(self.raw.get("recording_enabled", self.recording))
+
     @classmethod
     def from_payload(cls, payload: object) -> CameraStatus:
         data = _mapping(payload, "camera")
@@ -160,14 +165,15 @@ class Incident:
             representative_event_id=int(representative) if representative is not None else None,
             classes=tuple(str(value) for value in data.get("classes", []) if value),
             zones=tuple(str(value) for value in data.get("zones", []) if value),
-            created_at=str(data.get("created_at") or ""),
+            created_at=str(data.get("started_at") or data.get("created_at") or ""),
             trigger_source=str(data.get("trigger_source") or ""),
         )
 
     @classmethod
     def from_feed_item(cls, payload: object) -> Incident:
         data = _mapping(payload, "incident feed item")
-        incident_id = str(data.get("incident_id") or data.get("id") or "")
+        # The feed's id matches MQTT incident_id; feed incident_id is a shorter key.
+        incident_id = str(data.get("id") or data.get("incident_id") or "")
         camera_id = str(data.get("camera_id") or "")
         if not incident_id or not camera_id:
             raise SurvNGPayloadError("incident feed item is missing identity")
@@ -175,11 +181,12 @@ class Incident:
         return cls(
             incident_id=incident_id,
             camera_id=camera_id,
-            state="complete",
+            # A persisted feed item can still belong to an active MQTT incident.
+            state="updated",
             event_ids=tuple(int(item.get("id")) for item in data.get("events", []) if isinstance(item, Mapping) and item.get("id")),
             representative_event_id=int(representative) if representative is not None else None,
             classes=tuple(str(value) for value in data.get("labels", []) if value),
             zones=tuple(str(value) for value in data.get("zones", []) if value),
-            created_at=str(data.get("created_at") or data.get("start_at") or ""),
+            created_at=str(data.get("start_at") or data.get("created_at") or ""),
             trigger_source=str(data.get("trigger_source") or ""),
         )
