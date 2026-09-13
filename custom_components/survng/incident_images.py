@@ -32,6 +32,16 @@ class IncidentImages:
         temporary = target.with_suffix(".tmp")
         temporary.write_bytes(body)
         os.replace(temporary, target)
+        self._cleanup()
+        return f"/media/local/survng/{self._namespace}/{name}"
+
+    def cleanup(self) -> None:
+        with self._lock:
+            self._cleanup()
+
+    def _cleanup(self) -> None:
+        if self._root is None or not self._root.exists():
+            return
         files = sorted((*self._root.glob("*.jpg"), *self._root.glob("*.png")), key=lambda path: path.stat().st_mtime, reverse=True)
         total = 0
         for index, path in enumerate(files):
@@ -39,4 +49,14 @@ class IncidentImages:
             total += stat.st_size
             if index >= MAX_FILES or total > MAX_BYTES or time.time() - stat.st_mtime > MAX_AGE:
                 path.unlink(missing_ok=True)
-        return f"/media/local/survng/{self._namespace}/{name}"
+
+    def purge(self) -> None:
+        """Remove only this entry's generated attachments and temporary files."""
+        with self._lock:
+            if self._root is None or not self._root.exists():
+                return
+            for pattern in ("*.jpg", "*.png", "*.tmp"):
+                for path in self._root.glob(pattern):
+                    path.unlink(missing_ok=True)
+            if not any(self._root.iterdir()):
+                self._root.rmdir()

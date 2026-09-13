@@ -12,6 +12,7 @@ from .incident_images import IncidentImages
 from .models import Incident, SurvNGPayloadError
 
 LOGGER = logging.getLogger(__name__)
+IMAGE_CLEANUP_INTERVAL = 60 * 60
 
 
 class NativeIncidents:
@@ -23,6 +24,7 @@ class NativeIncidents:
         self._initialized = False
         self._listeners = []
         self._task = None
+        self._cleanup_task = None
         self._image_tasks: dict[str, asyncio.Task] = {}
         self._image_slots = asyncio.Semaphore(2)
         self._images = IncidentImages(hass.config.media_dirs.get("local"), entry.entry_id)
@@ -61,13 +63,32 @@ class NativeIncidents:
         self._listeners.append(listener)
         return lambda: self._listeners.remove(listener)
 
+    async def _cleanup_images(self) -> None:
+        failed = False
+        while True:
+            try:
+                await self.hass.async_add_executor_job(self._images.cleanup)
+                failed = False
+            except OSError:
+                if not failed:
+                    LOGGER.exception("Unable to expire SurvNG notification images")
+                failed = True
+            # Separate from reconnect sleeps; cancellation stops maintenance.
+            try:
+                await asyncio.wait_for(asyncio.Event().wait(), IMAGE_CLEANUP_INTERVAL)
+            except TimeoutError:
+                pass
+
     def start(self) -> None:
+        self._cleanup_task = self.entry.async_create_background_task(
+            self.hass, self._cleanup_images(), "SurvNG image retention", eager_start=False,
+        )
         self._task = self.entry.async_create_background_task(
             self.hass, self._run(), "SurvNG incident stream", eager_start=False,
         )
 
     async def stop(self) -> None:
-        tasks = [task for task in (self._task, *self._image_tasks.values()) if task is not None]
+        tasks = [task for task in (self._task, self._cleanup_task, *self._image_tasks.values()) if task is not None]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -137,9 +158,16 @@ class NativeIncidents:
                     body = await self._download_image(incident.representative_event_id)
                     self._image_counts["downloaded"] += 1
                     self._image_stage(key, "saving")
-                    url = await self.hass.async_add_executor_job(
+                    save = asyncio.ensure_future(self.hass.async_add_executor_job(
                         self._images.save, key, incident.revision, body,
-                    )
+                    ))
+                    try:
+                        url = await asyncio.shield(save)
+                    except asyncio.CancelledError:
+                        # Executor writes cannot be cancelled. Drain them before
+                        # unload/removal can purge the entry's attachments.
+                        await save
+                        raise
                     self._image_counts["saved"] += 1
                     self._image_error = False
                     current = self.incidents.get(key)

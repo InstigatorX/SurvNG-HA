@@ -55,7 +55,9 @@ A cover is fetched from the representative event at download time; a delayed
 fetch can therefore see a refinement that already replaced the original cover.
 Cached attachment files themselves are immutable per revision. Images are limited
 to 10 MiB each; the per-entry cache retains at most 512 files / 128 MiB / seven
-days, with cleanup when new images arrive. Older attachment links may expire.
+days, with cleanup on startup, hourly, and when new images arrive. Expiry may
+lag by up to one hour while HA is running. Removing the integration deletes its
+cached attachments. Older attachment links may expire.
 Images unavailable during a storage/network outage do not prevent text delivery.
 
 Reconnect uses the last processed stream cursor. SurvNG journals recent lifecycle

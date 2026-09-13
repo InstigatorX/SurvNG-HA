@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError
 from .const import CONF_API_TOKEN, PLATFORMS
 from .coordinator import SurvNGCoordinator
+from .incident_images import IncidentImages
 from .incidents import NativeIncidents
 from .mqtt import SurvNGMqttState, async_subscribe_state
 from .notification_preferences import ZoneNotificationPreferences
@@ -84,3 +85,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data.setdefault("mqtt_prefix", "survng")
     hass.config_entries.async_update_entry(entry, data=data, version=1)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> None:
+    """Stop writers even if platform unload failed, then purge attachments."""
+    if (runtime := getattr(entry, "runtime_data", None)) is not None:
+        await runtime.incidents.stop()
+    images = IncidentImages(hass.config.media_dirs.get("local"), entry.entry_id)
+    await hass.async_add_executor_job(images.purge)
