@@ -26,7 +26,8 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
         if latest is not None:
             entity.emit(latest.state, {
                 **latest.event_data(entry.data["url"]), "reconciled": True,
-                "notifications_enabled": preferences.allows(latest.camera_id, latest.zones),
+                "notifications_enabled": latest.details.get("notifications_enabled", True)
+                and preferences.allows(latest.camera_id, latest.zones),
             })
         return [entity]
 
@@ -37,7 +38,9 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
         payload["server_id"] = entry.entry_id
         payload["notification_tag"] = f"survng-{entry.entry_id}-{incident.incident_id}"
         payload["reconciled"] = not notify
-        payload["notifications_enabled"] = preferences.allows(incident.camera_id, incident.zones)
+        payload["notifications_enabled"] = incident.details.get("notifications_enabled", True) and preferences.allows(
+            incident.camera_id, incident.zones,
+        )
         entity = entities.get(incident.camera_id)
         if entity:
             entity.emit(incident.state, payload)

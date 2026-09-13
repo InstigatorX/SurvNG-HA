@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import SurvNGApiClient
+from .api import SurvNGApiClient, SurvNGAuthError, SurvNGError
 from .const import CONF_API_TOKEN, PLATFORMS
 from .coordinator import SurvNGCoordinator
 from .incidents import NativeIncidents
@@ -39,6 +40,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> bo
     mqtt_state = SurvNGMqttState()
     notification_preferences = ZoneNotificationPreferences(hass, entry.entry_id)
     await notification_preferences.async_load()
+    notification_preferences.bind(coordinator)
+    try:
+        await notification_preferences.async_migrate()
+    except SurvNGAuthError as error:
+        raise ConfigEntryAuthFailed(str(error)) from error
+    except SurvNGError as error:
+        raise ConfigEntryNotReady("Unable to migrate zone notification preferences") from error
     entry.runtime_data = SurvNGRuntimeData(
         client, coordinator, mqtt_state, [], NativeIncidents(hass, entry, client), notification_preferences,
     )

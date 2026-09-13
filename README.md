@@ -74,7 +74,11 @@ reconciliation.
 ## Zone notification switches
 
 Each configured zone gets a **Zone - {name} notifications** switch on its camera
-device. Switches default to on and are saved locally in HA across restarts.
+device. Switches default to on and share the setting saved in SurvNG under
+Zone config → **HA/MQTT Notifications**, below **Exclude from EMA**.
+Changes made in SurvNG appear in HA on its next metadata refresh.
+Existing HA-local muted zones are migrated when the integration loads against a
+server supporting this setting; older servers retain HA-local controls.
 Toggle them from the camera device page, a dashboard, or a Node-RED HA Action
 node using `switch.turn_on` / `switch.turn_off` with the switch entity as target.
 

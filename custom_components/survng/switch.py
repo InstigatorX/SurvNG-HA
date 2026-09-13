@@ -1,4 +1,4 @@
-"""SurvNG camera controls and HA-local zone notification switches."""
+"""SurvNG camera controls and zone notification switches."""
 
 import hashlib
 
@@ -95,8 +95,8 @@ class SurvNGZoneNotificationSwitch(SurvNGEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        # This preference remains editable during a server outage, using the
-        # last reconciled inventory. Removed cameras/zones become unavailable.
+        # Removed cameras/zones become unavailable. A server-owned toggle
+        # reports an API error if the server cannot accept the change.
         return (self.camera_id in self.coordinator.data.cameras
                 and self.zone in self.coordinator.data.zones.get(self.camera_id, ()))
 
@@ -111,7 +111,7 @@ class SurvNGZoneNotificationSwitch(SurvNGEntity, SwitchEntity):
     async def _set(self, enabled: bool) -> None:
         try:
             await self.preferences.async_set(self.camera_id, self.zone, enabled)
-        except OSError as error:
+        except (OSError, SurvNGError) as error:
             raise HomeAssistantError("Unable to save zone notification preference") from error
         self.async_write_ha_state()
 

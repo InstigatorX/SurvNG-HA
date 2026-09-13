@@ -153,3 +153,30 @@ def test_failed_save_does_not_change_in_memory_preference(tmp_path):
             write.assert_not_called()
         await hass.async_block_till_done()
     asyncio.run(run())
+
+
+def test_server_setting_sync_and_legacy_migration(tmp_path):
+    async def run():
+        hass = HomeAssistant(str(tmp_path))
+        preferences = ZoneNotificationPreferences(hass, "server")
+        await preferences.async_set("gate", "Porch", False)
+        coord = coordinator()
+        coord.data.zone_notifications = {"gate": {"Porch": True}}
+        async def set_remote(camera, zone, enabled):
+            coord.data.zone_notifications[camera][zone] = enabled
+        coord.client.set_zone_notifications = AsyncMock(side_effect=set_remote)
+        coord.async_request_refresh = AsyncMock()
+        preferences.bind(coord)
+        await preferences.async_migrate()
+        coord.client.set_zone_notifications.assert_awaited_once_with("gate", "Porch", False)
+        assert not preferences.enabled("gate", "Porch")
+        assert not preferences._disabled
+        await preferences.async_set("gate", "Porch", True)
+        assert preferences.enabled("gate", "Porch")
+        coord.data.zone_notifications["gate"]["Porch"] = False
+        assert not preferences.enabled("gate", "Porch")
+        reloaded = ZoneNotificationPreferences(hass, "server")
+        await reloaded.async_load()
+        assert not reloaded._disabled
+        await hass.async_block_till_done()
+    asyncio.run(run())

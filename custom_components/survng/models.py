@@ -115,6 +115,7 @@ class SurvNGData:
     cameras: Mapping[str, CameraStatus]
     zones: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     recent_incidents: tuple[Incident, ...] = ()
+    zone_notifications: Mapping[str, Mapping[str, bool | None]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +190,7 @@ class Incident:
                 "objects", "identities", "people", "camera_semantics", "started_at",
                 "last_activity_at", "completed_at", "updated_at", "duration_seconds",
                 "event_count", "has_objects", "image_available", "image_revision",
-                "initial_event_id", "initial_image_available", "changed_fields",
+                "initial_event_id", "initial_image_available", "changed_fields", "notifications_enabled",
             ) if key in data},
         )
 

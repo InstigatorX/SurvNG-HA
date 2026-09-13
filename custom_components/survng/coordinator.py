@@ -28,7 +28,8 @@ class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
     async def _async_update_data(self) -> SurvNGData:
         try:
             cameras = await self.client.cameras()
-            zones = await self.client.camera_zones()
+            zone_notifications = await self.client.camera_zone_notifications()
+            zones = {camera: tuple(settings) for camera, settings in zone_notifications.items()}
             recent_incidents = await self.client.recent_incidents()
         except SurvNGAuthError:
             self.config_entry.async_start_reauth(self.hass)
@@ -50,5 +51,6 @@ class SurvNGCoordinator(DataUpdateCoordinator[SurvNGData]):
             server=server,
             cameras=camera_map,
             zones=zones,
+            zone_notifications=zone_notifications,
             recent_incidents=recent_incidents,
         )

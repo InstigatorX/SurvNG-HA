@@ -164,8 +164,9 @@ in authenticated HA media storage. Image delivery enriches the same revision;
 consumers must distinguish `delivery: lifecycle` from `delivery: image`.
 No image bytes, credentials, or original stream URLs enter the event bus or MQTT.
 
-Per-camera zone notification switches persist HA-local preferences in a namespaced
-HA Store. Event entities retain every incident, while the bus publisher checks
+Per-camera zone notification switches read server metadata and write the scoped
+camera zone-notifications endpoint. A namespaced HA Store remains a fallback for
+older servers; existing local mutes migrate to server config during setup. Event entities retain every incident, while the bus publisher checks
 current preferences for every lifecycle and image delivery. Any enabled matched
 zone allows the incident; unzoned incidents are allowed. This gates Node-RED and
 blueprint notifications without changing SurvNG detection or recording settings.
