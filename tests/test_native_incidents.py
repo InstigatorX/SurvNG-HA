@@ -205,3 +205,35 @@ def test_image_diagnostics_record_auth_storage_and_unexpected_failures(tmp_path)
             if isinstance(error, RuntimeError):
                 assert outcomes == [error]  # Unexpected bugs remain visible to HA.
     asyncio.run(run())
+
+
+def test_webp_evidence_uses_jpeg_thumbnail_for_notification_delivery(tmp_path):
+    """The original snapshot route preserves WebP; the thumbnail route converts it."""
+    from custom_components.survng.api import SurvNGApiClient
+
+    async def run():
+        responses = []
+        async def request(_method, url, **kwargs):
+            body = b"RIFF\x00\x00\x00\x00WEBP" if url.endswith("/snapshot.jpg") else b"\xff\xd8converted"
+            async def chunks(_size):
+                yield body
+            response = SimpleNamespace(status=200, content=SimpleNamespace(iter_chunked=chunks), release=Mock())
+            responses.append(response)
+            return response
+        session = SimpleNamespace(request=AsyncMock(side_effect=request))
+        client = SurvNGApiClient(session, "https://survng.example/prefix", "test-token")
+        stream = native(tmp_path, client)
+        received = []
+        stream.subscribe(lambda item, _notify: received.append(item))
+        stream.accept(payload(image_available=True))
+        await asyncio.gather(*stream._image_tasks.values())
+        session.request.assert_awaited_once()
+        args, kwargs = session.request.call_args
+        assert args == ("GET", "https://survng.example/prefix/api/events/41/thumbnail.jpg")
+        assert kwargs["headers"] == {"Authorization": "Bearer test-token"}
+        assert kwargs["params"] == {"width": 1280, "quality": 85}
+        assert received[-1].details["delivery"] == "image"
+        assert received[-1].details["image_url"].endswith(".jpg")
+        assert next(tmp_path.rglob("*.jpg")).read_bytes() == b"\xff\xd8converted"
+        responses[0].release.assert_called_once()
+    asyncio.run(run())

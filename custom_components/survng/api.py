@@ -167,7 +167,12 @@ class SurvNGApiClient:
             response.close()
 
     async def incident_snapshot(self, event_id: int) -> bytes:
-        response = await self._response("GET", f"/api/events/{int(event_id)}/snapshot.jpg")
+        # snapshot.jpg serves the original evidence, which may be WebP despite
+        # its URL suffix. The thumbnail endpoint always encodes JPEG for phones.
+        response = await self._response(
+            "GET", f"/api/events/{int(event_id)}/thumbnail.jpg",
+            params={"width": 1280, "quality": 85},
+        )
         try:
             body = await self._read_bounded(response, 10 * 1024 * 1024)
             if not body.startswith((b"\xff\xd8", b"\x89PNG\r\n\x1a\n")):
