@@ -201,3 +201,12 @@ incident page with evidence, summary, playback, and an ongoing incident's live
 camera link. The stable incident path preserves the original incident identity
 when its representative event changes. Public Notification URL settings take
 precedence; otherwise the integration resolves the path against its API base URL.
+
+### Camera incident notification switch
+
+Each camera has an **Incident notifications** switch. It controls the server's
+**Motion/Object → HA/MQTT Options → Send incident notifications** setting for
+both native HA and MQTT incident lifecycle messages. Detection and recording
+continue while notifications are disabled. Update SurvNG to a version supporting
+`/api/cameras/{camera_id}/incident-notifications`; the token requires
+`camera:control` to change the switch.

@@ -21,6 +21,7 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
             SurvNGCameraSwitch(coordinator, camera_id, "power"),
             SurvNGCameraSwitch(coordinator, camera_id, "recording"),
             SurvNGCameraSwitch(coordinator, camera_id, "detection"),
+            SurvNGCameraSwitch(coordinator, camera_id, "incident_notifications"),
         ],
     )
     entry.async_on_unload(unsubscribe)
@@ -49,7 +50,9 @@ class SurvNGCameraSwitch(SurvNGEntity, SwitchEntity):
     def __init__(self, coordinator, camera_id: str, feature: str) -> None:
         super().__init__(coordinator, camera_id)
         self.feature = feature
-        self._attr_name = feature.title()
+        self._attr_name = "Incident notifications" if feature == "incident_notifications" else feature.title()
+        if feature == "incident_notifications":
+            self._attr_icon = "mdi:bell"
         self._attr_unique_id = f"{camera_id}_{feature}"
 
     @property
@@ -59,6 +62,7 @@ class SurvNGCameraSwitch(SurvNGEntity, SwitchEntity):
             "power": camera.running,
             "recording": camera.recording_enabled,
             "detection": camera.detection_enabled,
+            "incident_notifications": camera.incident_notifications_enabled,
         }[self.feature])
 
     async def _set(self, enabled: bool) -> None:
@@ -67,6 +71,8 @@ class SurvNGCameraSwitch(SurvNGEntity, SwitchEntity):
                 await self.coordinator.client.set_camera_power(self.camera_id, enabled)
             elif self.feature == "recording":
                 await self.coordinator.client.set_recording(self.camera_id, enabled)
+            elif self.feature == "incident_notifications":
+                await self.coordinator.client.set_incident_notifications(self.camera_id, enabled)
             else:
                 await self.coordinator.client.set_detection(self.camera_id, enabled)
             await self.coordinator.async_request_refresh()

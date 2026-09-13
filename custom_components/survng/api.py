@@ -248,3 +248,6 @@ class SurvNGApiClient:
 
     async def set_detection(self, camera_id: str, enabled: bool) -> None:
         await self._json("PUT", f"/api/cameras/{quote(camera_id, safe='')}/detection", json={"enabled": enabled})
+
+    async def set_incident_notifications(self, camera_id: str, enabled: bool) -> None:
+        await self._json("PUT", f"/api/cameras/{quote(camera_id, safe='')}/incident-notifications", json={"enabled": enabled})

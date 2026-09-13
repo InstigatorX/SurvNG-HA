@@ -85,6 +85,10 @@ class CameraStatus:
     raw: Mapping[str, Any] = field(repr=False)
 
     @property
+    def incident_notifications_enabled(self) -> bool:
+        return self.raw.get("incident_notifications_enabled", True) is not False
+
+    @property
     def recording_enabled(self) -> bool:
         """Desired recording state, independent of recorder health or camera power."""
         return bool(self.raw.get("recording_enabled", self.recording))
