@@ -108,3 +108,14 @@ def test_incident_notification_link_uses_public_url_with_private_api_fallback():
     assert legacy.event_data("http://192.168.1.2:8088")["event_url"] == (
         "http://192.168.1.2:8088/incidents?event_ids=41"
     )
+
+
+def test_stable_incident_path_uses_configured_api_prefix_without_public_override():
+    item = Incident.from_payload({
+        "incident_id": "incident-gate-41", "camera_id": "gate", "state": "complete",
+        "representative_event_id": 99, "incident_path": "/incidents/incident-gate-41",
+        "event_url": "/survng/incidents/incident-gate-41",
+    })
+    assert item.event_data("https://ha.example/survng")["event_url"] == (
+        "https://ha.example/survng/incidents/incident-gate-41"
+    )

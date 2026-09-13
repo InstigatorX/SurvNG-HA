@@ -193,3 +193,9 @@ contracts. Actual phone delivery still needs acceptance testing on your devices.
 
 Removing the config entry stops the native stream and image tasks, unsubscribes
 optional MQTT listeners, and unloads every entity platform. Removing files alone is not sufficient; remove the entry first.
+
+Notification links from updated SurvNG servers open a dedicated responsive
+incident page with evidence, summary, playback, and an ongoing incident's live
+camera link. The stable incident path preserves the original incident identity
+when its representative event changes. Public Notification URL settings take
+precedence; otherwise the integration resolves the path against its API base URL.

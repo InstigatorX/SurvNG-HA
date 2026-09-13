@@ -157,6 +157,9 @@ class Incident:
     def event_data(self, base_url: str) -> dict[str, Any]:
         event_id = self.representative_event_id
         event_url = self.details.get("event_url")
+        incident_path = self.details.get("incident_path")
+        if (not event_url or str(event_url).startswith("/")) and isinstance(incident_path, str) and incident_path.startswith("/incidents/"):
+            event_url = f"{base_url.rstrip('/')}{incident_path}"
         return {
             **self.details,
             "incident_id": self.incident_id, "camera_id": self.camera_id,
@@ -191,7 +194,7 @@ class Incident:
                 "objects", "identities", "people", "camera_semantics", "started_at",
                 "last_activity_at", "completed_at", "updated_at", "duration_seconds",
                 "event_count", "has_objects", "image_available", "image_revision",
-                "initial_event_id", "initial_image_available", "changed_fields", "notifications_enabled", "event_url",
+                "initial_event_id", "initial_image_available", "changed_fields", "notifications_enabled", "event_url", "incident_path",
             ) if key in data},
         )
 
