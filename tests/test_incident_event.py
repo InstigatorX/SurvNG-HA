@@ -13,7 +13,8 @@ def test_native_incidents_publish_rich_events_and_suppress_baseline() -> None:
     native = SimpleNamespace(incidents={}, subscribe=Mock(return_value=lambda: None))
     coordinator = SimpleNamespace()
     entry = SimpleNamespace(
-        runtime_data=SimpleNamespace(coordinator=coordinator, incidents=native),
+        runtime_data=SimpleNamespace(coordinator=coordinator, incidents=native,
+                                     notification_preferences=SimpleNamespace(allows=lambda _camera, _zones: True)),
         data={"url": "https://survng.example/survng"}, entry_id="server", async_on_unload=Mock(),
     )
     hass = SimpleNamespace(bus=SimpleNamespace(async_fire=Mock()))

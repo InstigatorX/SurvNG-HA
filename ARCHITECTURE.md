@@ -92,6 +92,7 @@ custom_components/survng/
   event_stream.py
   incidents.py
   incident_images.py
+  notification_preferences.py
   manifest.json
   models.py
   repairs.py
@@ -162,6 +163,12 @@ and links. Images are fetched separately with the stored API token and cached
 in authenticated HA media storage. Image delivery enriches the same revision;
 consumers must distinguish `delivery: lifecycle` from `delivery: image`.
 No image bytes, credentials, or original stream URLs enter the event bus or MQTT.
+
+Per-camera zone notification switches persist HA-local preferences in a namespaced
+HA Store. Event entities retain every incident, while the bus publisher checks
+current preferences for every lifecycle and image delivery. Any enabled matched
+zone allows the incident; unzoned incidents are allowed. This gates Node-RED and
+blueprint notifications without changing SurvNG detection or recording settings.
 
 See README for bounded journal/image retention, reconnect behavior, and Node-RED
 handoff. HTTP feed polling is not authoritative for lifecycle completion.

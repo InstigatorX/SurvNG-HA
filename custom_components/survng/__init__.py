@@ -12,6 +12,7 @@ from .const import CONF_API_TOKEN, PLATFORMS
 from .coordinator import SurvNGCoordinator
 from .incidents import NativeIncidents
 from .mqtt import SurvNGMqttState, async_subscribe_state
+from .notification_preferences import ZoneNotificationPreferences
 from .repairs import update_legacy_discovery_issue
 
 
@@ -22,6 +23,7 @@ class SurvNGRuntimeData:
     mqtt: SurvNGMqttState
     mqtt_unsubscribers: list
     incidents: NativeIncidents
+    notification_preferences: ZoneNotificationPreferences
 
 
 type SurvNGConfigEntry = ConfigEntry[SurvNGRuntimeData]
@@ -35,7 +37,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SurvNGConfigEntry) -> bo
     coordinator = SurvNGCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
     mqtt_state = SurvNGMqttState()
-    entry.runtime_data = SurvNGRuntimeData(client, coordinator, mqtt_state, [], NativeIncidents(hass, entry, client))
+    notification_preferences = ZoneNotificationPreferences(hass, entry.entry_id)
+    await notification_preferences.async_load()
+    entry.runtime_data = SurvNGRuntimeData(
+        client, coordinator, mqtt_state, [], NativeIncidents(hass, entry, client), notification_preferences,
+    )
     update_legacy_discovery_issue(hass, entry, coordinator.data.server.mqtt)
     entry.runtime_data.mqtt_unsubscribers.extend(
         await async_subscribe_state(hass, entry, mqtt_state, coordinator)

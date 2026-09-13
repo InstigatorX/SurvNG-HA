@@ -34,7 +34,8 @@ An authenticated native event stream supplies incident lifecycle notifications.
 Optional MQTT supplies motion/object activity overlays. Clean camera images are
 fetched on demand; live streams use SurvNG's credential-safe go2rtc descriptor.
 
-Each incident updates its camera's event entity and fires `survng_incident` with:
+Each incident updates its camera's event entity. When its zone notifications are
+enabled, it also fires `survng_incident` with:
 
 - Stable `incident_id`, `camera_id`, `server_id`, `notification_tag`, and `revision`.
 - `state`: `new`, `updated`, or `complete`; readable `title` and factual `summary`.
@@ -44,6 +45,7 @@ Each incident updates its camera's event entity and fires `survng_incident` with
 - `image_url`, `initial_image_url`, `final_image_url`, `image_pending`, and
   `image_available`. These are authenticated HA media URLs, not SurvNG credentials.
 - `event_url`, `changed_fields`, and `delivery` (`lifecycle` or `image`).
+- `notifications_enabled`, evaluated against the HA zone switches at delivery.
 
 Text is delivered immediately. Image download completion fires another event
 with the same incident revision and notification tag, with `delivery: image`.
@@ -69,6 +71,29 @@ The event entity's “What happened” value identifies the lifecycle stage; its
 `survng_incident` rather than entity state changes, which also reflect baseline
 reconciliation.
 
+## Zone notification switches
+
+Each configured zone gets a **Zone - {name} notifications** switch on its camera
+device. Switches default to on and are saved locally in HA across restarts.
+Toggle them from the camera device page, a dashboard, or a Node-RED HA Action
+node using `switch.turn_on` / `switch.turn_off` with the switch entity as target.
+
+- If all zones matched by an incident are off, the integration suppresses its
+  `survng_incident` bus deliveries, including image updates and completion.
+- If any matched zone is on, the whole incident passes. Matching uses the
+  incident's aggregate zone list.
+- Incidents with no matched zone still pass; use the motion/object filters in
+  the Node-RED function to narrow those notifications.
+- Each zone preference belongs to its camera, even when zone names are repeated.
+- The camera's Incident entity still updates while muted. Detection and recording
+  continue normally. Switches also apply to the optional notification blueprint.
+
+Existing Node-RED flows listening for `survng_incident` need no extra switch
+check. Turning a zone back on permits future deliveries without replaying past
+ones. Turning it off does not retract notifications already sent to a phone.
+New zones are discovered during HTTP reconciliation. Removed zones become
+unavailable, and retain their preference if re-added with the same camera/name.
+
 ## Node-RED notifications
 
 Use the Home Assistant WebSocket nodes in Node-RED; no MQTT node is required:
@@ -76,11 +101,33 @@ Use the Home Assistant WebSocket nodes in Node-RED; no MQTT node is required:
 1. Add **Events: all**, select your HA server, and set **Event Type** to
    `survng_incident`. Set its **event data** output to `msg.payload`.
 2. Add a **Function** node with [the notification mapper](examples/node-red-notification.js).
-   Add camera/class/person/zone filters before the notification mapping as desired.
+   Set `motionFilter` to `"exclude"` (default) for object/person detections,
+   `"only"` for motion-only incidents, or `"include"` for all incidents.
+   Set `objectTypes` to an allowlist such as `["person", "car"]`; leave it `[]`
+   to allow all object classes. A match on any class passes the whole incident.
+   Labels are case-insensitive. Add camera/recognized-person/zone filters before
+   the notification mapping as desired.
 3. Add a Home Assistant **Action** node, select your `notify.mobile_app_*` action,
    and set **Data** to the JSONata expression `notification`. This reads the
    object prepared in `msg.notification`; no JSON string interpolation is needed.
+   Keep **Block Input Overrides** enabled so the incoming HA event payload cannot
+   override the configured action or notification data. The **Action** field must
+   contain your actual notification action; selecting a device alone is not enough.
 4. Use a Debug node on `msg.incident` to inspect the full detection information.
+
+If Node-RED reports `ValidationError: "action" is not allowed to be empty`, open
+the Action node and select a valid action such as `notify.mobile_app_your_phone`.
+The Function node supplies notification content; it does not select the phone or
+set `msg.payload.action`. Deploy the flow after changing the Action node.
+
+Motion filtering uses detection evidence (`has_objects` / `classes`), not the
+trigger source: motion can initiate an incident that later detects a person.
+Each update is evaluated independently, so excluding an initial motion-only
+event still allows a later object detection and its image through. Apply the
+same Function node to lifecycle and image deliveries.
+The object allowlist applies to incidents with detected objects. Motion-only
+incidents are controlled separately by `motionFilter`; for people and cars only,
+use `motionFilter = "exclude"` and `objectTypes = ["person", "car"]`.
 
 Both lifecycle and image deliveries matter: an image delivery can share the same
 `revision` as its preceding text delivery. Do not discard it merely because the

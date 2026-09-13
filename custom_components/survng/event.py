@@ -16,6 +16,7 @@ EVENT_TYPE = "survng_incident"
 async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) -> None:
     coordinator = entry.runtime_data.coordinator
     native = entry.runtime_data.incidents
+    preferences = entry.runtime_data.notification_preferences
     entities: dict[str, SurvNGIncidentEvent] = {}
 
     def factory(camera_id: str):
@@ -23,7 +24,10 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
         entities[camera_id] = entity
         latest = next((item for item in reversed(list(native.incidents.values())) if item.camera_id == camera_id), None)
         if latest is not None:
-            entity.emit(latest.state, {**latest.event_data(entry.data["url"]), "reconciled": True})
+            entity.emit(latest.state, {
+                **latest.event_data(entry.data["url"]), "reconciled": True,
+                "notifications_enabled": preferences.allows(latest.camera_id, latest.zones),
+            })
         return [entity]
 
     unsubscribe_entities = setup_dynamic_camera_entities(coordinator, async_add_entities, factory)
@@ -33,10 +37,11 @@ async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) 
         payload["server_id"] = entry.entry_id
         payload["notification_tag"] = f"survng-{entry.entry_id}-{incident.incident_id}"
         payload["reconciled"] = not notify
+        payload["notifications_enabled"] = preferences.allows(incident.camera_id, incident.zones)
         entity = entities.get(incident.camera_id)
         if entity:
             entity.emit(incident.state, payload)
-        if notify:
+        if notify and payload["notifications_enabled"]:
             hass.bus.async_fire(EVENT_TYPE, payload)
 
     unsubscribe_incidents = native.subscribe(publish_incident)

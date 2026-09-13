@@ -4,8 +4,22 @@ const event = msg.incident || msg.payload?.event || msg.payload;
 const incident = event?.data || event;
 if (!incident?.incident_id || incident.reconciled) return null;
 
-// Put optional camera/class/person/zone filters here, before notification mapping.
-// Example: if (!incident.classes?.includes("person")) return null;
+// "exclude": objects/people only; "only": motion-only; "include": all incidents.
+const motionFilter = String("exclude");
+// Empty means all object types. Example: ["person", "car", "dog"].
+const objectTypes = [];
+const normalize = value => String(value || "").trim().toLowerCase();
+const classes = [
+    ...(Array.isArray(incident.classes) ? incident.classes : []),
+    ...(Array.isArray(incident.objects) ? incident.objects.map(object => object?.label) : [])
+].map(normalize).filter(Boolean);
+const allowedTypes = new Set(objectTypes.map(normalize).filter(Boolean));
+const hasObjects = incident.has_objects === true || classes.length > 0;
+if (motionFilter === "exclude" && !hasObjects) return null;
+if (motionFilter === "only" && hasObjects) return null;
+if (hasObjects && allowedTypes.size && !classes.some(type => allowedTypes.has(type))) return null;
+
+// Put optional camera/recognized-person/zone filters here, before notification mapping.
 const initial = incident.state === "new" && incident.delivery === "lifecycle";
 const data = {
     tag: incident.notification_tag,
