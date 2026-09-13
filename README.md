@@ -210,3 +210,9 @@ both native HA and MQTT incident lifecycle messages. Detection and recording
 continue while notifications are disabled. Update SurvNG to a version supporting
 `/api/cameras/{camera_id}/incident-notifications`; the token requires
 `camera:control` to change the switch.
+
+The **SurvNG server device** also has an **Incident notifications** switch that
+controls all cameras together. It mirrors the global setting under
+**API & MQTT/HA → MQTT/HA → General** and leaves per-camera and zone preferences
+intact. It requires the same `camera:control` scope and an updated SurvNG server;
+on older servers the switch is unavailable.

@@ -15,6 +15,7 @@ PARALLEL_UPDATES = 0
 
 async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) -> None:
     coordinator = entry.runtime_data.coordinator
+    async_add_entities([SurvNGGlobalNotificationSwitch(coordinator)])
     unsubscribe = setup_dynamic_camera_entities(
         coordinator, async_add_entities,
         lambda camera_id: [
@@ -120,6 +121,36 @@ class SurvNGZoneNotificationSwitch(SurvNGEntity, SwitchEntity):
         except (OSError, SurvNGError) as error:
             raise HomeAssistantError("Unable to save zone notification preference") from error
         self.async_write_ha_state()
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._set(False)
+
+
+class SurvNGGlobalNotificationSwitch(SurvNGEntity, SwitchEntity):
+    _attr_name = "Incident notifications"
+    _attr_icon = "mdi:bell"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_incident_notifications"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.data.incident_notifications_enabled is not None
+
+    @property
+    def is_on(self) -> bool | None:
+        return self.coordinator.data.incident_notifications_enabled
+
+    async def _set(self, enabled: bool) -> None:
+        try:
+            await self.coordinator.client.set_global_incident_notifications(enabled)
+            await self.coordinator.async_request_refresh()
+        except SurvNGError as error:
+            raise HomeAssistantError("Unable to change global incident notifications") from error
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._set(True)

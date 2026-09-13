@@ -127,10 +127,14 @@ class SurvNGApiClient:
         return {camera: tuple(zones) for camera, zones in (await self.camera_zone_notifications()).items()}
 
     async def camera_zone_notifications(self) -> dict[str, dict[str, bool | None]]:
+        zones, _enabled = await self.notification_settings()
+        return zones
+
+    async def notification_settings(self) -> tuple[dict[str, dict[str, bool | None]], bool | None]:
         payload = await self._json("GET", "/api/integrations/home-assistant")
         if not isinstance(payload, dict) or not isinstance(payload.get("cameras"), list):
             raise SurvNGPayloadError("integration metadata has no camera inventory")
-        return {
+        zones = {
             str(camera["id"]): {
                 str(zone["name"]): zone.get("notifications_enabled")
                 if isinstance(zone.get("notifications_enabled"), bool) else None
@@ -140,6 +144,10 @@ class SurvNGApiClient:
             for camera in payload["cameras"]
             if isinstance(camera, dict) and camera.get("id")
         }
+
+        settings = payload.get("incident_notifications")
+        enabled = settings.get("enabled") if isinstance(settings, dict) else None
+        return zones, enabled if isinstance(enabled, bool) else None
 
     async def recent_incidents(self, limit: int = 20) -> tuple[Incident, ...]:
         payload = await self._json(
@@ -251,3 +259,6 @@ class SurvNGApiClient:
 
     async def set_incident_notifications(self, camera_id: str, enabled: bool) -> None:
         await self._json("PUT", f"/api/cameras/{quote(camera_id, safe='')}/incident-notifications", json={"enabled": enabled})
+
+    async def set_global_incident_notifications(self, enabled: bool) -> None:
+        await self._json("PUT", "/api/incident-notifications", json={"enabled": enabled})

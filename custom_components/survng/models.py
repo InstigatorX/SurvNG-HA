@@ -120,6 +120,7 @@ class SurvNGData:
     zones: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     recent_incidents: tuple[Incident, ...] = ()
     zone_notifications: Mapping[str, Mapping[str, bool | None]] = field(default_factory=dict)
+    incident_notifications_enabled: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

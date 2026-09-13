@@ -34,3 +34,26 @@ def test_incident_notification_switch_reads_and_updates_server(enabled):
     asyncio.run(switch.async_turn_off() if enabled else switch.async_turn_on())
     coordinator.client.set_incident_notifications.assert_awaited_once_with("gate", not enabled)
     coordinator.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.parametrize("enabled", [True, False, None])
+def test_global_notification_switch_state_and_control(enabled):
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from custom_components.survng.switch import SurvNGGlobalNotificationSwitch
+    coordinator = SimpleNamespace(
+        data=SimpleNamespace(incident_notifications_enabled=enabled),
+        last_update_success=True,
+        config_entry=SimpleNamespace(entry_id="entry", unique_id="server"),
+        client=SimpleNamespace(set_global_incident_notifications=AsyncMock()),
+        async_request_refresh=AsyncMock(),
+    )
+    switch = SurvNGGlobalNotificationSwitch(coordinator)
+    assert switch.is_on is enabled
+    assert switch.available is (enabled is not None)
+    assert switch.device_info["name"] == "SurvNG"
+    if enabled is not None:
+        asyncio.run(switch.async_turn_off() if enabled else switch.async_turn_on())
+        coordinator.client.set_global_incident_notifications.assert_awaited_once_with(not enabled)
+        coordinator.async_request_refresh.assert_awaited_once()
