@@ -71,6 +71,16 @@ The event entity's “What happened” value identifies the lifecycle stage; its
 `survng_incident` rather than entity state changes, which also reflect baseline
 reconciliation.
 
+## Server notification settings
+
+SurvNG's **API & MQTT/HA → MQTT/HA → General** settings apply to both native HA
+and MQTT incident delivery. **Exclude motion-only incidents** filters live,
+replayed, and recovered motion-only notifications before they reach HA; subsequent
+person/object updates still arrive. **Notification URL** supplies the public
+SurvNG base URL used for incident links, including a reverse-proxy path prefix.
+Leave it blank to use the integration's configured API URL. Image downloads keep
+using the API connection; attachments remain authenticated HA media URLs.
+
 ## Zone notification switches
 
 Each configured zone gets a **Zone - {name} notifications** switch on its camera

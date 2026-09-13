@@ -90,3 +90,21 @@ def test_incident_feed_prefers_mqtt_compatible_identity_and_start_time() -> None
 
 def test_legacy_recording_status_fallback() -> None:
     assert CameraStatus.from_payload({"id": "gate", "recording": True}).recording_enabled
+
+
+def test_incident_notification_link_uses_public_url_with_private_api_fallback():
+    item = Incident.from_payload({
+        "incident_id": "incident-gate-41", "camera_id": "gate", "state": "updated",
+        "representative_event_id": 41,
+        "event_url": "https://ha.loebees.com/survng/incidents?event_ids=41",
+    })
+    assert item.event_data("http://192.168.1.2:8088")["event_url"] == (
+        "https://ha.loebees.com/survng/incidents?event_ids=41"
+    )
+    legacy = Incident.from_payload({
+        "incident_id": "incident-gate-41", "camera_id": "gate", "state": "new",
+        "representative_event_id": 41,
+    })
+    assert legacy.event_data("http://192.168.1.2:8088")["event_url"] == (
+        "http://192.168.1.2:8088/incidents?event_ids=41"
+    )

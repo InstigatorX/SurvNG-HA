@@ -156,6 +156,7 @@ class Incident:
 
     def event_data(self, base_url: str) -> dict[str, Any]:
         event_id = self.representative_event_id
+        event_url = self.details.get("event_url")
         return {
             **self.details,
             "incident_id": self.incident_id, "camera_id": self.camera_id,
@@ -163,7 +164,7 @@ class Incident:
             "representative_event_id": event_id, "classes": list(self.classes),
             "zones": list(self.zones), "created_at": self.created_at,
             "trigger_source": self.trigger_source,
-            "event_url": f"{base_url}/incidents?event_ids={event_id}" if event_id else f"{base_url}/incidents",
+            "event_url": event_url or (f"{base_url}/incidents?event_ids={event_id}" if event_id else f"{base_url}/incidents"),
         }
 
     @classmethod
@@ -190,7 +191,7 @@ class Incident:
                 "objects", "identities", "people", "camera_semantics", "started_at",
                 "last_activity_at", "completed_at", "updated_at", "duration_seconds",
                 "event_count", "has_objects", "image_available", "image_revision",
-                "initial_event_id", "initial_image_available", "changed_fields", "notifications_enabled",
+                "initial_event_id", "initial_image_available", "changed_fields", "notifications_enabled", "event_url",
             ) if key in data},
         )
 
