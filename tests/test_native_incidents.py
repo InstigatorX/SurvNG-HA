@@ -159,3 +159,49 @@ def test_image_transient_failure_retries_without_losing_text(tmp_path):
         assert received[-1].details["image_available"]
         await stream.stop()
     asyncio.run(run())
+
+
+def test_image_diagnostics_track_download_save_and_delivery(tmp_path):
+    async def run():
+        release = asyncio.Event()
+        async def download(_event_id):
+            await release.wait()
+            return b"\xff\xd8image"
+        stream = native(tmp_path, SimpleNamespace(incident_snapshot=download))
+        stream.accept(payload(image_available=True))
+        assert stream.image_diagnostics()["active_jobs"][0]["stage"] == "queued"
+        await asyncio.sleep(0)
+        assert stream.image_diagnostics()["active_jobs"][0]["stage"] == "downloading"
+        release.set()
+        await asyncio.gather(*stream._image_tasks.values())
+        diagnostics = stream.image_diagnostics()
+        assert diagnostics["counts"] == {"queued": 1, "downloaded": 1, "saved": 1, "delivered": 1, "failed": 0}
+        assert diagnostics["active_jobs"] == []
+        assert diagnostics["pending_incidents"] == 0
+    asyncio.run(run())
+
+
+def test_image_diagnostics_record_auth_storage_and_unexpected_failures(tmp_path):
+    async def run():
+        for error, stage in ((SurvNGAuthError("secret token"), "downloading"),
+                             (PermissionError(13, "private path"), "saving"),
+                             (RuntimeError("sensitive response"), "downloading")):
+            client = SimpleNamespace(incident_snapshot=AsyncMock(return_value=b"\xff\xd8image"))
+            stream = native(tmp_path, client)
+            if stage == "saving":
+                stream._images.save = Mock(side_effect=error)
+            else:
+                client.incident_snapshot.side_effect = error
+            stream.accept(payload(image_available=True))
+            outcomes = await asyncio.gather(*stream._image_tasks.values(), return_exceptions=True)
+            diagnostic = stream.image_diagnostics()
+            assert diagnostic["last_failure"]["stage"] == stage
+            assert diagnostic["last_failure"]["error_type"] == type(error).__name__
+            assert diagnostic["counts"]["failed"] == 1
+            assert diagnostic["active_jobs"] == []
+            assert str(error) not in str(diagnostic)
+            if isinstance(error, SurvNGAuthError):
+                stream.entry.async_start_reauth.assert_called_once()
+            if isinstance(error, RuntimeError):
+                assert outcomes == [error]  # Unexpected bugs remain visible to HA.
+    asyncio.run(run())

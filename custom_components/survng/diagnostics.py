@@ -22,6 +22,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "native_incidents": {
             "connected": runtime.incidents.connected,
             "cached_incidents": len(runtime.incidents.incidents),
+            "images": runtime.incidents.image_diagnostics(),
         },
         "cameras": [{
             "id": camera.id,

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import OrderedDict
 from dataclasses import replace
 
@@ -26,6 +27,35 @@ class NativeIncidents:
         self._image_slots = asyncio.Semaphore(2)
         self._images = IncidentImages(hass.config.media_dirs.get("local"), entry.entry_id)
         self._image_error = False
+        self._image_progress: dict[str, tuple[str, float]] = {}
+        self._image_counts = {"queued": 0, "downloaded": 0, "saved": 0, "delivered": 0, "failed": 0}
+        self._last_image_failure: dict | None = None
+
+    def image_diagnostics(self) -> dict:
+        """Bounded operational state without image content, URLs, or raw errors."""
+        now = time.monotonic()
+        return {
+            "local_media_configured": bool(self.hass.config.media_dirs.get("local")),
+            "counts": dict(self._image_counts),
+            "pending_incidents": sum(bool(item.details.get("image_pending")) for item in self.incidents.values()),
+            "active_jobs": [
+                {"incident_id": key, "stage": stage, "stage_age_seconds": round(now - started, 1)}
+                for key, (stage, started) in self._image_progress.items()
+            ],
+            "last_failure": dict(self._last_image_failure) if self._last_image_failure else None,
+        }
+
+    def _image_stage(self, key: str, stage: str) -> None:
+        self._image_progress[key] = (stage, time.monotonic())
+
+    def _record_image_failure(self, key: str, error: Exception) -> None:
+        self._image_counts["failed"] += 1
+        self._last_image_failure = {
+            "incident_id": key,
+            "stage": self._image_progress.get(key, ("unknown", 0))[0],
+            "error_type": type(error).__name__,
+            "errno": error.errno if isinstance(error, OSError) else None,
+        }
 
     def subscribe(self, listener):
         self._listeners.append(listener)
@@ -79,6 +109,8 @@ class NativeIncidents:
         # At most one fetch per incident; catch up after each download.
         if (details["image_pending"] and incident.representative_event_id and notify
                 and incident.incident_id not in self._image_tasks):
+            self._image_counts["queued"] += 1
+            self._image_stage(incident.incident_id, "queued")
             self._image_tasks[incident.incident_id] = self.entry.async_create_background_task(
                 self.hass, self._fetch_images(incident.incident_id), "SurvNG incident image", eager_start=False,
             )
@@ -101,10 +133,14 @@ class NativeIncidents:
                 while (incident := self.incidents.get(key)) is not None:
                     if not incident.details.get("image_pending"):
                         return
+                    self._image_stage(key, "downloading")
                     body = await self._download_image(incident.representative_event_id)
+                    self._image_counts["downloaded"] += 1
+                    self._image_stage(key, "saving")
                     url = await self.hass.async_add_executor_job(
                         self._images.save, key, incident.revision, body,
                     )
+                    self._image_counts["saved"] += 1
                     self._image_error = False
                     current = self.incidents.get(key)
                     if current is None:
@@ -121,16 +157,30 @@ class NativeIncidents:
                                    changed_fields=["image"], delivery="image")
                     enriched = replace(current, details=details)
                     self.incidents[key] = enriched
+                    self._image_stage(key, "publishing")
                     self._emit(enriched, True)
+                    self._image_counts["delivered"] += 1
                     return
-        except SurvNGAuthError:
+        except SurvNGAuthError as error:
+            self._record_image_failure(key, error)
+            if not self._image_error:
+                LOGGER.warning("Incident image authorization failed; requesting reauthentication")
+                self._image_error = True
             self.entry.async_start_reauth(self.hass)
-        except (SurvNGError, SurvNGPayloadError, OSError, TimeoutError):
+        except (SurvNGError, SurvNGPayloadError, OSError, TimeoutError) as error:
+            self._record_image_failure(key, error)
             if not self._image_error:
                 LOGGER.warning("Incident image unavailable; text notifications remain active", exc_info=True)
                 self._image_error = True
+        except Exception as error:
+            self._record_image_failure(key, error)
+            if not self._image_error:
+                LOGGER.exception("Unexpected incident image failure")
+                self._image_error = True
+            raise
         finally:
             self._image_tasks.pop(key, None)
+            self._image_progress.pop(key, None)
 
     async def _run(self) -> None:
         delay = 3
