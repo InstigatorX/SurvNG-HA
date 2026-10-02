@@ -5,19 +5,23 @@ import json
 
 from .models import SurvNGPayloadError
 
-MAX_EVENT_BYTES = 4 * 1024 * 1024
+# The reconnect snapshot carries every recent incident in one event.
+MAX_EVENT_BYTES = 64 * 1024 * 1024
 
 
 async def decode_events(content):
-    buffer = b""
+    buffer = bytearray()
+    scanned = 0
     size = 0
     event_type = "message"
     event_id = ""
     data: list[str] = []
     async for chunk in content.iter_any():
         buffer += chunk
-        while b"\n" in buffer:
-            raw, buffer = buffer.split(b"\n", 1)
+        start = 0
+        while (end := buffer.find(b"\n", scanned)) != -1:
+            raw = bytes(buffer[start:end])
+            start = scanned = end + 1
             size += len(raw) + 1
             if size > MAX_EVENT_BYTES:
                 raise SurvNGPayloadError("SurvNG stream event is too large")
@@ -42,5 +46,7 @@ async def decode_events(content):
                     event_id = value
                 elif field == "data":
                     data.append(value)
+        del buffer[:start]
+        scanned = len(buffer)
         if size + len(buffer) > MAX_EVENT_BYTES:
             raise SurvNGPayloadError("SurvNG stream event is too large")

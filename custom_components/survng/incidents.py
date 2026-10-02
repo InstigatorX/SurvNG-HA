@@ -109,6 +109,8 @@ class NativeIncidents:
         previous = self.incidents.get(incident.incident_id)
         if previous is not None and previous.revision >= incident.revision:
             return
+        if previous is None and isinstance(payload, dict) and payload.get("state") == "active":
+            incident = replace(incident, state="new")
         details = {
             **incident.details,
             "image_url": previous.details.get("image_url") if previous else None,

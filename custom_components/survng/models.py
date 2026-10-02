@@ -181,6 +181,10 @@ class Incident:
         incident_id = str(data.get("incident_id") or "")
         camera_id = str(data.get("camera_id") or "")
         state = str(data.get("state") or "")
+        if state == "active":
+            # Schema 3 reports the incident's own state. Whether an active
+            # incident is new depends on what this subscriber already knows.
+            state = "updated"
         if not incident_id or not camera_id or state not in {"new", "updated", "complete"}:
             raise SurvNGPayloadError("incident identity or lifecycle state is invalid")
         representative = data.get("representative_event_id")

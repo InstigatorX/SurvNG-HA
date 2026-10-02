@@ -23,6 +23,14 @@ normalize_base_url = urls.normalize_base_url
 require_secure_transport = urls.require_secure_transport
 
 
+def test_schema_three_active_incident_state_is_accepted() -> None:
+    incident = Incident.from_payload({
+        "incident_id": "incident-gate-41", "camera_id": "gate", "state": "active",
+        "schema_version": 3, "revision": 4,
+    })
+    assert incident.state == "updated"
+
+
 def test_normalize_base_url_preserves_subpath() -> None:
     assert normalize_base_url("https://ha.example/survng/") == "https://ha.example/survng"
 

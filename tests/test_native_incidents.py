@@ -1,5 +1,6 @@
 """Native delivery without MQTT, including replay, images, and cancellation."""
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -141,6 +142,34 @@ def test_sse_rejects_oversized_and_invalid_data():
         asyncio.run(run(b"data: not json\n\n"))
     with patch("custom_components.survng.event_stream.MAX_EVENT_BYTES", 10), pytest.raises(SurvNGPayloadError):
         asyncio.run(run(b"data: " + b"x" * 11))
+
+
+def test_sse_decodes_a_large_snapshot_split_across_many_chunks():
+    incidents = [{"id": index, "summary": "x" * 900} for index in range(6000)]
+    body = ("event: incident_notifications_state\ndata: "
+            + json.dumps({"schema_version": 2, "incidents": incidents})
+            + "\n\nid: boot:1\nevent: connected\ndata: {}\n\n").encode()
+    assert len(body) > 4 * 1024 * 1024
+
+    async def run():
+        async def chunks():
+            for offset in range(0, len(body), 65536):
+                yield body[offset:offset + 65536]
+        return [event async for event in decode_events(SimpleNamespace(iter_any=chunks))]
+    events = asyncio.run(run())
+    assert [(event_id, kind) for event_id, kind, _payload in events] == [
+        ("", "incident_notifications_state"), ("boot:1", "connected")]
+    assert events[0][2]["incidents"] == incidents
+
+
+def test_schema_three_active_incident_is_new_once_then_updated(tmp_path):
+    stream = native(tmp_path)
+    received = []
+    stream.subscribe(lambda item, notify: received.append(item.state))
+    stream.accept(payload(1, "active", schema_version=3))
+    stream.accept(payload(2, "active", schema_version=3))
+    stream.accept(payload(3, "complete", schema_version=3))
+    assert received == ["new", "updated", "complete"]
 
 
 def test_image_transient_failure_retries_without_losing_text(tmp_path):
