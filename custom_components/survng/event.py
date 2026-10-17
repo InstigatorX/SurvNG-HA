@@ -8,6 +8,7 @@ from homeassistant.components.event import EventEntity
 
 from . import SurvNGConfigEntry
 from .entity import SurvNGEntity
+from .models import entity_event_attributes
 from .platform import setup_dynamic_camera_entities
 
 EVENT_TYPE = "survng_incident"
@@ -64,7 +65,9 @@ class SurvNGIncidentEvent(SurvNGEntity, EventEntity):
         self._attr_unique_id = f"{camera_id}_incident"
 
     def emit(self, event_type: str, payload: dict) -> None:
-        self._trigger_event(event_type, payload)
+        # The bus event keeps detection geometry. The entity state cannot:
+        # Home Assistant drops attributes larger than 16 KiB.
+        self._trigger_event(event_type, entity_event_attributes(payload))
         # Initial reconciliation can run before async_add_entities registers us.
         if self.hass is not None and self.entity_id is not None:
             self.async_write_ha_state()

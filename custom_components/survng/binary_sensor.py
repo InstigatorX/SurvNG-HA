@@ -4,11 +4,8 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass, Bina
 
 from . import SurvNGConfigEntry
 from .entity import SurvNGEntity
+from .mqtt import zone_slug as _zone_slug
 from .platform import setup_dynamic_camera_entities
-
-
-def _zone_slug(value: str) -> str:
-    return "-".join("".join(character if character.isalnum() else " " for character in value.lower()).split()) or "zone"
 
 
 async def async_setup_entry(hass, entry: SurvNGConfigEntry, async_add_entities) -> None:

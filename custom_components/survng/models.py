@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -140,6 +141,51 @@ class StreamSource:
             transport=str(data.get("transport") or "rtsp"),
             source=str(data.get("source") or "live"),
         )
+
+
+# Home Assistant refuses to record state attributes above 16 KiB. Leave room
+# for the entity's own name and event type.
+ENTITY_ATTRIBUTE_BUDGET = 14336
+_HEAVY_ENTITY_KEYS = ("camera_semantics", "identities")
+_COMPACT_OBJECT_KEYS = ("id", "label", "confidence", "certainty")
+
+
+def _json_size(payload: dict) -> int:
+    return len(json.dumps(payload, default=str, separators=(",", ":")).encode())
+
+
+def _compact_subject(item: dict) -> dict:
+    compact = {
+        key: item[key]
+        for key in _COMPACT_OBJECT_KEYS
+        if key in item and item[key] not in (None, "", [], {})
+    }
+    zones: list[str] = []
+    for zone in item.get("zones") or []:
+        if zone and zone not in zones:
+            zones.append(str(zone))
+    for observation in item.get("observations") or []:
+        if not isinstance(observation, dict):
+            continue
+        for zone in observation.get("zones") or []:
+            if zone and str(zone) not in zones:
+                zones.append(str(zone))
+    if zones:
+        compact["zones"] = zones
+    return compact
+
+
+def entity_event_attributes(payload: dict) -> dict:
+    """Attributes small enough for the recorder to store on an event entity."""
+    stored = {key: value for key, value in payload.items() if key not in _HEAVY_ENTITY_KEYS}
+    objects = stored.get("objects")
+    if isinstance(objects, list):
+        stored["objects"] = [_compact_subject(item) for item in objects if isinstance(item, dict)]
+    if _json_size(stored) > ENTITY_ATTRIBUTE_BUDGET:
+        stored.pop("objects", None)
+    if _json_size(stored) > ENTITY_ATTRIBUTE_BUDGET:
+        stored.pop("event_ids", None)
+    return stored
 
 
 @dataclass(frozen=True, slots=True)

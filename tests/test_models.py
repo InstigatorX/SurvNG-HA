@@ -100,6 +100,32 @@ def test_legacy_recording_status_fallback() -> None:
     assert CameraStatus.from_payload({"id": "gate", "recording": True}).recording_enabled
 
 
+def test_entity_attributes_drop_detection_geometry():
+    ENTITY_ATTRIBUTE_BUDGET = models.ENTITY_ATTRIBUTE_BUDGET
+    entity_event_attributes = models.entity_event_attributes
+
+    observation = {"box": [0, 0, 1, 1], "zones": ["Driveway"], "image": {"width": 1920}, "embedding": "x" * 8000}
+    payload = {
+        "summary": "Car observed",
+        "camera_semantics": {"reports": ["x" * 1000]},
+        "identities": [{"embedding": "y" * 1000}],
+        "objects": [{
+            "id": "car-1", "label": "car", "confidence": 0.91, "certainty": "observed",
+            "observations": [observation],
+        }],
+        "event_ids": [103052],
+    }
+    stored = entity_event_attributes(payload)
+    assert stored["summary"] == "Car observed"
+    assert stored["objects"] == [{
+        "id": "car-1", "label": "car", "confidence": 0.91, "certainty": "observed", "zones": ["Driveway"],
+    }]
+    assert "camera_semantics" not in stored
+    assert "identities" not in stored
+    assert payload["objects"][0]["observations"][0]["embedding"].startswith("x")
+    assert len(__import__("json").dumps(stored).encode()) < ENTITY_ATTRIBUTE_BUDGET
+
+
 def test_incident_notification_link_uses_public_url_with_private_api_fallback():
     item = Incident.from_payload({
         "incident_id": "incident-gate-41", "camera_id": "gate", "state": "updated",

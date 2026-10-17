@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from functools import partial
 from typing import Any
 
@@ -12,6 +13,26 @@ from .models import Incident, SurvNGPayloadError
 
 CONF_MQTT_PREFIX = "mqtt_prefix"
 DEFAULT_MQTT_PREFIX = "survng"
+ZONE_HOLD_SECONDS = 15
+
+
+def zone_slug(value: str) -> str:
+    return "-".join(
+        "".join(character if character.isalnum() else " " for character in value.lower()).split()
+    ) or "zone"
+
+
+def _zone_observed_at(payload: dict) -> datetime | None:
+    raw = payload.get("timestamp") or payload.get("created_at")
+    if not raw:
+        return None
+    try:
+        observed = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    return observed.astimezone(timezone.utc)
 
 
 @dataclass(slots=True)
@@ -34,6 +55,36 @@ class SurvNGMqttState:
     def zone_active(self, camera_id: str, zone_slug: str, now: float | None = None) -> bool:
         key = (camera_id, zone_slug)
         return bool(self.zones.get(key)) and self.zone_until.get(key, 0) > (now or time.monotonic())
+
+    def note_zone_objects(self, payload: object, now: float | None = None, *, live: bool = False) -> bool:
+        """Mark zones occupied from a native stream event. Stale replays are ignored."""
+        if not isinstance(payload, dict):
+            return False
+        camera_id = str(payload.get("camera_id") or "")
+        zones = payload.get("zones")
+        if not camera_id or not isinstance(zones, list):
+            return False
+        observed = _zone_observed_at(payload)
+        if (
+            not live
+            and observed is not None
+            and (datetime.now(timezone.utc) - observed).total_seconds() > ZONE_HOLD_SECONDS
+        ):
+            return False
+        expiry = (now or time.monotonic()) + ZONE_HOLD_SECONDS
+        changed = False
+        for item in zones:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("zone") or "")
+            classes = tuple(str(label) for label in item.get("classes", []) if label)
+            if not name or not classes:
+                continue
+            key = (camera_id, zone_slug(name))
+            self.zones[key] = classes
+            self.zone_until[key] = expiry
+            changed = True
+        return changed
 
     def update(self, topic: str, raw_payload: str, prefix: str = "survng") -> bool:
         try:

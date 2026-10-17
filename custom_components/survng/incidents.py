@@ -32,6 +32,7 @@ class NativeIncidents:
         self._image_progress: dict[str, tuple[str, float]] = {}
         self._image_counts = {"queued": 0, "downloaded": 0, "saved": 0, "delivered": 0, "failed": 0}
         self._last_image_failure: dict | None = None
+        self._zone_expiries: list = []
 
     def image_diagnostics(self) -> dict:
         """Bounded operational state without image content, URLs, or raw errors."""
@@ -87,7 +88,24 @@ class NativeIncidents:
             self.hass, self._run(), "SurvNG incident stream", eager_start=False,
         )
 
+    def _accept_zone(self, payload: object, *, live: bool) -> None:
+        runtime = getattr(self.entry, "runtime_data", None)
+        if runtime is None or not runtime.mqtt.note_zone_objects(payload, live=live):
+            return
+        runtime.coordinator.async_update_listeners()
+        from homeassistant.helpers.event import async_call_later
+
+        def refresh(_now) -> None:
+            current = getattr(self.entry, "runtime_data", None)
+            if current is not None:
+                current.coordinator.async_update_listeners()
+
+        self._zone_expiries.append(async_call_later(self.hass, 15, refresh))
+
     async def stop(self) -> None:
+        for cancel in self._zone_expiries:
+            cancel()
+        self._zone_expiries.clear()
         tasks = [task for task in (self._task, self._cleanup_task, *self._image_tasks.values()) if task is not None]
         for task in tasks:
             task.cancel()
@@ -226,6 +244,8 @@ class NativeIncidents:
                         self._initialized = True
                     elif kind == "incident_lifecycle":
                         self.accept(payload)
+                    elif kind == "zone_object":
+                        self._accept_zone(payload, live=self.connected)
                     elif kind == "connected":
                         if not self._initialized:
                             raise SurvNGPayloadError("SurvNG server needs native incident notification support")
