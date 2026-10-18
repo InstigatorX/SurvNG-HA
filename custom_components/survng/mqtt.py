@@ -41,6 +41,8 @@ class SurvNGMqttState:
     objects: dict[str, tuple[str, ...]] = field(default_factory=dict)
     zones: dict[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
     zone_until: dict[tuple[str, str], float] = field(default_factory=dict)
+    occupancy_zones: dict[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
+    occupancy_until: dict[tuple[str, str], float] = field(default_factory=dict)
     incidents: dict[str, Incident] = field(default_factory=dict)
     incident_sequence: int = 0
     motion_until: dict[str, float] = field(default_factory=dict)
@@ -54,7 +56,10 @@ class SurvNGMqttState:
 
     def zone_active(self, camera_id: str, zone_slug: str, now: float | None = None) -> bool:
         key = (camera_id, zone_slug)
-        return bool(self.zones.get(key)) and self.zone_until.get(key, 0) > (now or time.monotonic())
+        moment = now or time.monotonic()
+        if key in self.occupancy_zones and self.occupancy_until.get(key, 0) > moment:
+            return True
+        return bool(self.zones.get(key)) and self.zone_until.get(key, 0) > moment
 
     def note_zone_objects(self, payload: object, now: float | None = None, *, live: bool = False) -> bool:
         """Mark zones occupied from a native stream event. Stale replays are ignored."""
@@ -85,6 +90,51 @@ class SurvNGMqttState:
             self.zone_until[key] = expiry
             changed = True
         return changed
+
+    def note_zone_occupancy(self, payload: object, now: float | None = None, *, live: bool = False) -> bool:
+        """Replace one camera's occupied zones from a snapshot.
+
+        Listed zones are on. Omitted zones are off. Every snapshot refreshes
+        the fail-safe, including one whose occupied set did not change.
+        MQTT topic holds are left untouched.
+        """
+        if not isinstance(payload, dict):
+            return False
+        camera_id = str(payload.get("camera_id") or "")
+        zones = payload.get("zones")
+        if not camera_id or not isinstance(zones, list):
+            return False
+        try:
+            delay = float(payload.get("fail_safe_seconds") or 240)
+        except (TypeError, ValueError):
+            delay = 240.0
+        if delay <= 0:
+            delay = 240.0
+        observed = _zone_observed_at(payload)
+        if (
+            not live
+            and observed is not None
+            and (datetime.now(timezone.utc) - observed).total_seconds() > delay
+        ):
+            return False
+        listed: dict[tuple[str, str], tuple[str, ...]] = {}
+        for item in zones:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("zone") or "")
+            classes = tuple(str(label) for label in item.get("classes", []) if label)
+            if not name or not classes:
+                continue
+            listed[(camera_id, zone_slug(name))] = classes
+        for key in [key for key in self.occupancy_zones if key[0] == camera_id]:
+            if key not in listed:
+                self.occupancy_zones.pop(key, None)
+                self.occupancy_until.pop(key, None)
+        expiry = (now or time.monotonic()) + delay
+        for key, classes in listed.items():
+            self.occupancy_zones[key] = classes
+            self.occupancy_until[key] = expiry
+        return True
 
     def update(self, topic: str, raw_payload: str, prefix: str = "survng") -> bool:
         try:

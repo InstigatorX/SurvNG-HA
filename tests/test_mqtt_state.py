@@ -59,6 +59,38 @@ def test_native_zone_objects_expire_and_ignore_stale_replays() -> None:
     assert state.zone_active("lower-garage", "road")
 
 
+def test_zone_occupancy_replaces_a_camera_and_refreshes_without_the_pulse_hold() -> None:
+    state = load_mqtt().SurvNGMqttState()
+    now = 1000.0
+    assert state.note_zone_occupancy({
+        "camera_id": "lower-garage",
+        "timestamp": "2026-10-16T19:32:27+00:00",
+        "fail_safe_seconds": 240,
+        "zones": [
+            {"zone": "Driveway", "classes": ["car"]},
+            {"zone": "Road", "classes": ["car"]},
+        ],
+    }, now=now, live=True)
+    assert state.zone_active("lower-garage", "driveway", now=now + 20)
+    assert state.zone_active("lower-garage", "road", now=now + 20)
+    assert state.note_zone_occupancy({
+        "camera_id": "lower-garage",
+        "timestamp": "2026-10-16T19:34:27+00:00",
+        "fail_safe_seconds": 240,
+        "zones": [{"zone": "Driveway", "classes": ["car"]}],
+    }, now=now + 30, live=True)
+    assert state.zone_active("lower-garage", "driveway", now=now + 40)
+    assert not state.zone_active("lower-garage", "road", now=now + 40)
+    assert not state.zone_active("lower-garage", "driveway", now=now + 30 + 241)
+    assert not state.note_zone_occupancy({
+        "camera_id": "lower-garage",
+        "timestamp": "2020-01-01T00:00:00+00:00",
+        "fail_safe_seconds": 240,
+        "zones": [],
+    })
+    assert state.zone_active("lower-garage", "driveway", now=now + 40)
+
+
 def test_zone_activity_expires() -> None:
     state = load_mqtt().SurvNGMqttState()
     assert state.update("survng/zone/gate/front-drive/object", '{"classes":["car"]}')

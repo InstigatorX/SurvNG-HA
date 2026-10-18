@@ -33,6 +33,7 @@ class NativeIncidents:
         self._image_counts = {"queued": 0, "downloaded": 0, "saved": 0, "delivered": 0, "failed": 0}
         self._last_image_failure: dict | None = None
         self._zone_expiries: list = []
+        self._occupancy_expiries: dict[str, object] = {}
 
     def image_diagnostics(self) -> dict:
         """Bounded operational state without image content, URLs, or raw errors."""
@@ -102,10 +103,39 @@ class NativeIncidents:
 
         self._zone_expiries.append(async_call_later(self.hass, 15, refresh))
 
+    def _accept_occupancy(self, payload: object, *, live: bool) -> None:
+        runtime = getattr(self.entry, "runtime_data", None)
+        if runtime is None or not isinstance(payload, dict):
+            return
+        if not runtime.mqtt.note_zone_occupancy(payload, live=live):
+            return
+        runtime.coordinator.async_update_listeners()
+        camera_id = str(payload.get("camera_id") or "")
+        try:
+            delay = float(payload.get("fail_safe_seconds") or 240)
+        except (TypeError, ValueError):
+            delay = 240.0
+        from homeassistant.helpers.event import async_call_later
+
+        existing = self._occupancy_expiries.pop(camera_id, None)
+        if existing:
+            existing()
+
+        def refresh(_now) -> None:
+            self._occupancy_expiries.pop(camera_id, None)
+            current = getattr(self.entry, "runtime_data", None)
+            if current is not None:
+                current.coordinator.async_update_listeners()
+
+        self._occupancy_expiries[camera_id] = async_call_later(self.hass, delay, refresh)
+
     async def stop(self) -> None:
         for cancel in self._zone_expiries:
             cancel()
         self._zone_expiries.clear()
+        for cancel in self._occupancy_expiries.values():
+            cancel()
+        self._occupancy_expiries.clear()
         tasks = [task for task in (self._task, self._cleanup_task, *self._image_tasks.values()) if task is not None]
         for task in tasks:
             task.cancel()
@@ -244,6 +274,8 @@ class NativeIncidents:
                         self._initialized = True
                     elif kind == "incident_lifecycle":
                         self.accept(payload)
+                    elif kind == "zone_occupancy":
+                        self._accept_occupancy(payload, live=self.connected)
                     elif kind == "zone_object":
                         self._accept_zone(payload, live=self.connected)
                     elif kind == "connected":
