@@ -29,8 +29,11 @@ token. HACS custom-repository installation can use this repository's root.
 
 ## Behavior
 
-HTTP polling every 30 seconds reconciles authoritative server and camera state.
-An authenticated native event stream supplies incident lifecycle notifications.
+An authenticated native event stream supplies incident lifecycle notifications
+and, on servers that support it, live camera and server state. HTTP polling then
+only refreshes zone and notification settings every 5 minutes; without stream
+state (older servers, or while the stream reconnects) it reconciles server and
+camera state at the configured interval (30 seconds by default).
 Optional MQTT supplies motion/object activity overlays. Clean camera images are
 fetched on demand; live streams use SurvNG's credential-safe go2rtc descriptor.
 

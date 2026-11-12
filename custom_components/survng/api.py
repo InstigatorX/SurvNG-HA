@@ -161,7 +161,9 @@ class SurvNGApiClient:
     async def incident_events(self, cursor: str = ""):
         response = await self._response(
             "GET", "/api/events/stream",
-            params={"incidents_only": "1", "last_event_id": cursor},
+            # state=1: camera and server state ride the same stream. Servers
+            # without it ignore the parameter, and polling stays in charge.
+            params={"incidents_only": "1", "state": "1", "last_event_id": cursor},
             timeout=ClientTimeout(total=None, connect=5, sock_read=45),
         )
         try:

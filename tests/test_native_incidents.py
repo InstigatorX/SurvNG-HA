@@ -266,3 +266,46 @@ def test_webp_evidence_uses_jpeg_thumbnail_for_notification_delivery(tmp_path):
         assert next(tmp_path.rglob("*.jpg")).read_bytes() == b"\xff\xd8converted"
         responses[0].release.assert_called_once()
     asyncio.run(run())
+
+
+def test_state_events_feed_the_coordinator_and_loss_restores_polling(tmp_path):
+    async def run():
+        calls = []
+        done = asyncio.Event()
+        coordinator = Mock()
+
+        async def events(cursor):
+            calls.append(cursor)
+            yield "", "incident_notifications_state", {"schema_version": 2, "incidents": []}
+            yield "", "cameras_state", [{"id": "gate"}]
+            yield "", "system_state", {"instance_id": "server"}
+            yield "boot:1", "connected", {}
+            yield "boot:2", "camera_state", {"id": "gate", "recording": False}
+            if len(calls) == 1:
+                raise SurvNGConnectionError("disconnected")
+            done.set()
+            await asyncio.Future()
+
+        stream = native(tmp_path, SimpleNamespace(incident_events=events))
+        stream.entry.runtime_data = SimpleNamespace(coordinator=coordinator)
+        with patch("custom_components.survng.incidents.asyncio.sleep", new=AsyncMock()):
+            stream.start()
+            await asyncio.wait_for(done.wait(), 1)
+            await stream.stop()
+        coordinator.apply_cameras.assert_called_with([{"id": "gate"}])
+        coordinator.apply_system.assert_called_with({"instance_id": "server"})
+        coordinator.apply_camera.assert_called_with({"id": "gate", "recording": False})
+        streamed = [call.args[0] for call in coordinator.set_state_streamed.call_args_list]
+        assert streamed == [True, False, True]  # stream, lost, restored
+    asyncio.run(run())
+
+
+def test_malformed_state_payload_does_not_drop_the_stream(tmp_path):
+    stream = native(tmp_path)
+    coordinator = Mock()
+    coordinator.apply_camera.side_effect = SurvNGPayloadError("camera is missing id")
+    stream.entry.runtime_data = SimpleNamespace(coordinator=coordinator)
+
+    stream._accept_state("camera_state", {})  # must not raise
+
+    coordinator.set_state_streamed.assert_not_called()

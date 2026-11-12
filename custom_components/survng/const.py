@@ -17,3 +17,5 @@ DEFAULT_STREAM_SOURCE: Final = "live"
 MIN_SCAN_INTERVAL: Final = 10
 MAX_SCAN_INTERVAL: Final = 300
 UPDATE_INTERVAL: Final = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
+# While camera/server state streams, polling only refreshes settings.
+STREAMED_SCAN_INTERVAL: Final = timedelta(minutes=5)

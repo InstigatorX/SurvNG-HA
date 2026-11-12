@@ -88,6 +88,30 @@ class NativeIncidents:
             self.hass, self._run(), "SurvNG incident stream", eager_start=False,
         )
 
+    def _accept_state(self, kind: str, payload: object) -> None:
+        """Feed streamed camera/server state to the coordinator."""
+        runtime = getattr(self.entry, "runtime_data", None)
+        if runtime is None:
+            return
+        coordinator = runtime.coordinator
+        try:
+            if kind == "cameras_state":
+                coordinator.apply_cameras(payload)
+            elif kind == "camera_state":
+                coordinator.apply_camera(payload)
+            else:
+                coordinator.apply_system(payload)
+                # A system summary proves the server streams state.
+                coordinator.set_state_streamed(True)
+        except SurvNGPayloadError:
+            # One malformed status must not tear down incident delivery.
+            LOGGER.debug("Ignoring malformed SurvNG %s payload", kind)
+
+    def _stream_state_lost(self) -> None:
+        runtime = getattr(self.entry, "runtime_data", None)
+        if runtime is not None:
+            runtime.coordinator.set_state_streamed(False)
+
     def _accept_occupancy(self, payload: object, *, live: bool) -> None:
         runtime = getattr(self.entry, "runtime_data", None)
         if runtime is None or not isinstance(payload, dict):
@@ -258,6 +282,8 @@ class NativeIncidents:
                         self.accept(payload)
                     elif kind == "zone_occupancy":
                         self._accept_occupancy(payload, live=self.connected)
+                    elif kind in {"cameras_state", "camera_state", "system_state"}:
+                        self._accept_state(kind, payload)
                     elif kind == "connected":
                         if not self._initialized:
                             raise SurvNGPayloadError("SurvNG server needs native incident notification support")
@@ -271,10 +297,12 @@ class NativeIncidents:
                 raise
             except SurvNGAuthError:
                 self.connected = False
+                self._stream_state_lost()
                 self.entry.async_start_reauth(self.hass)
                 return
             except (SurvNGError, SurvNGPayloadError, OSError, TimeoutError):
                 self.connected = False
+                self._stream_state_lost()
                 if not reported:
                     LOGGER.warning("Native incident stream unavailable; reconnecting", exc_info=True)
                     reported = True

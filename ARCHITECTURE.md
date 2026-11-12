@@ -14,7 +14,7 @@ default; Home Assistant must trust the issuing CA.
 | Camera inventory and runtime state | `GET /api/cameras` | Returns one runtime-status object per stable camera ID. Includes display name, running/connected/fresh-frame state, detection state, recording state, capture health, stream dimensions, ONVIF state, and motion/tracking diagnostics. |
 | Server health | `GET /api/system/status` | Returns process instance ID, CPU and application memory, storage, detector, aggregate camera counts, MQTT, go2rtc, and camera-startup status. |
 | Integration authentication | `Authorization: Bearer <token>` | Native scoped long-lived tokens. `read` covers inventory, status, snapshots, streams and events; `camera:control` covers power, recording and detection changes; `admin` includes every scope but is not needed by this integration. |
-| Native incident stream | `GET /api/events/stream?incidents_only=1` | Authenticated SSE with a lifecycle baseline, replay cursor, and schema 2 `incident_lifecycle` revisions. The application owns settlement and recovery independently of MQTT. |
+| Native incident stream | `GET /api/events/stream?incidents_only=1&state=1` | Authenticated SSE with a lifecycle baseline, replay cursor, and schema 2 `incident_lifecycle` revisions. The application owns settlement and recovery independently of MQTT. With `state=1`, it also sends a `cameras_state` snapshot and a light `system_state` summary before `connected`, replayable per-camera `camera_state` changes, and a fresh `system_state` every 30 seconds. Servers without it ignore the parameter. |
 | Clean current image | `GET /api/cameras/{camera_id}/snapshot.jpg?source=live|main` | Returns a clean JPEG with `Cache-Control: no-store`; `404` for an unknown camera and `503` for a powered-off camera or unavailable frame. |
 | Stream metadata | `GET /api/cameras/{camera_id}/live-info?source=live|main` | Returns go2rtc availability, stream name, codec list, delivery and transcoding state. It currently also returns an internal go2rtc host. |
 | Stable stream source | `GET /api/cameras/{camera_id}/stream-source?source=live|main` | Returns a versioned, credential-safe, FFmpeg-readable go2rtc RTSP descriptor. The integration consumes the returned URL but never exposes it as entity state or diagnostics. |
@@ -112,7 +112,11 @@ incident messages. HTTP, SSE and MQTT payloads are treated as untrusted and pars
 at this boundary.
 
 `coordinator.py` owns slow reconciliation only: camera inventory, server health
-and removal/addition discovery. Snapshot requests bypass the coordinator and
+and removal/addition discovery. When the stream delivers `system_state`, camera
+and server state come from the stream: entities refresh only when a displayed
+field changes, and polling drops to zone and notification settings every 5
+minutes. Losing the stream restores the configured interval and triggers a
+catch-up poll. Snapshot requests bypass the coordinator and
 call the shared API client directly. MQTT events update the coordinator's
 in-memory records and request listener refreshes without causing an immediate
 HTTP poll for every event.

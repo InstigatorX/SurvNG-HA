@@ -21,6 +21,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
         },
         "native_incidents": {
             "connected": runtime.incidents.connected,
+            # True while camera/server state streams and polling only refreshes settings.
+            "state_streamed": getattr(runtime.coordinator, "state_streamed", False),
+            "poll_interval_seconds": runtime.coordinator.update_interval.total_seconds()
+            if runtime.coordinator.update_interval else None,
             "cached_incidents": len(runtime.incidents.incidents),
             "images": runtime.incidents.image_diagnostics(),
         },
