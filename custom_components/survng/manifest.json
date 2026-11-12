@@ -1,13 +1,21 @@
 {
   "domain": "survng",
   "name": "SurvNG",
-  "codeowners": [],
+  "after_dependencies": [
+    "mqtt"
+  ],
+  "codeowners": [
+    "@InstigatorX"
+  ],
   "config_flow": true,
-  "dependencies": ["stream", "media_source"],
-  "after_dependencies": ["mqtt"],
-  "documentation": "https://github.com/steveloebrich/SurvNG-HA",
+  "dependencies": [
+    "stream",
+    "media_source"
+  ],
+  "documentation": "https://github.com/InstigatorX/SurvNG-HA",
   "integration_type": "hub",
   "iot_class": "local_push",
+  "issue_tracker": "https://github.com/InstigatorX/SurvNG-HA/issues",
   "requirements": [],
   "version": "2.0"
 }
