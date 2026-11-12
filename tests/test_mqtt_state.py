@@ -37,28 +37,6 @@ def test_incident_updates_are_deduplicated() -> None:
     assert state.incidents["incident-gate-1"].classes == ("car",)
 
 
-def test_native_zone_objects_expire_and_ignore_stale_replays() -> None:
-    state = load_mqtt().SurvNGMqttState()
-    assert state.note_zone_objects({
-        "camera_id": "lower-garage",
-        "timestamp": "2099-01-01T00:00:00+00:00",
-        "zones": [{"zone": "Driveway", "classes": ["car"]}],
-    })
-    assert state.zone_active("lower-garage", "driveway")
-    assert not state.note_zone_objects({
-        "camera_id": "lower-garage",
-        "timestamp": "2020-01-01T00:00:00+00:00",
-        "zones": [{"zone": "Road", "classes": ["car"]}],
-    })
-    assert not state.zone_active("lower-garage", "road")
-    assert state.note_zone_objects({
-        "camera_id": "lower-garage",
-        "timestamp": "2020-01-01T00:00:00+00:00",
-        "zones": [{"zone": "Road", "classes": ["car"]}],
-    }, live=True)
-    assert state.zone_active("lower-garage", "road")
-
-
 def test_zone_occupancy_replaces_a_camera_and_refreshes_without_the_pulse_hold() -> None:
     state = load_mqtt().SurvNGMqttState()
     now = 1000.0

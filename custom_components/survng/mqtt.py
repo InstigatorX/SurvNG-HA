@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
@@ -13,7 +13,6 @@ from .models import Incident, SurvNGPayloadError
 
 CONF_MQTT_PREFIX = "mqtt_prefix"
 DEFAULT_MQTT_PREFIX = "survng"
-ZONE_HOLD_SECONDS = 15
 
 
 def zone_slug(value: str) -> str:
@@ -31,8 +30,8 @@ def _zone_observed_at(payload: dict) -> datetime | None:
     except ValueError:
         return None
     if observed.tzinfo is None:
-        observed = observed.replace(tzinfo=timezone.utc)
-    return observed.astimezone(timezone.utc)
+        observed = observed.replace(tzinfo=UTC)
+    return observed.astimezone(UTC)
 
 
 @dataclass(slots=True)
@@ -61,36 +60,6 @@ class SurvNGMqttState:
             return True
         return bool(self.zones.get(key)) and self.zone_until.get(key, 0) > moment
 
-    def note_zone_objects(self, payload: object, now: float | None = None, *, live: bool = False) -> bool:
-        """Mark zones occupied from a native stream event. Stale replays are ignored."""
-        if not isinstance(payload, dict):
-            return False
-        camera_id = str(payload.get("camera_id") or "")
-        zones = payload.get("zones")
-        if not camera_id or not isinstance(zones, list):
-            return False
-        observed = _zone_observed_at(payload)
-        if (
-            not live
-            and observed is not None
-            and (datetime.now(timezone.utc) - observed).total_seconds() > ZONE_HOLD_SECONDS
-        ):
-            return False
-        expiry = (now or time.monotonic()) + ZONE_HOLD_SECONDS
-        changed = False
-        for item in zones:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("zone") or "")
-            classes = tuple(str(label) for label in item.get("classes", []) if label)
-            if not name or not classes:
-                continue
-            key = (camera_id, zone_slug(name))
-            self.zones[key] = classes
-            self.zone_until[key] = expiry
-            changed = True
-        return changed
-
     def note_zone_occupancy(self, payload: object, now: float | None = None, *, live: bool = False) -> bool:
         """Replace one camera's occupied zones from a snapshot.
 
@@ -114,7 +83,7 @@ class SurvNGMqttState:
         if (
             not live
             and observed is not None
-            and (datetime.now(timezone.utc) - observed).total_seconds() > delay
+            and (datetime.now(UTC) - observed).total_seconds() > delay
         ):
             return False
         listed: dict[tuple[str, str], tuple[str, ...]] = {}

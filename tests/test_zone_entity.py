@@ -25,7 +25,7 @@ def test_zone_entity_name_uses_zone_prefix() -> None:
     assert entity.unique_id == "gate_zone_front-drive_object"
 
 
-def test_zone_sensor_follows_native_zone_objects() -> None:
+def test_zone_sensor_follows_native_zone_occupancy_snapshots() -> None:
     state = SurvNGMqttState()
     coordinator = SimpleNamespace(
         data=SimpleNamespace(cameras={
@@ -35,8 +35,12 @@ def test_zone_sensor_follows_native_zone_objects() -> None:
     )
     entity = SurvNGZoneObjectSensor(coordinator, state, "lower-garage", "Driveway")
     assert entity.is_on is False
-    assert state.note_zone_objects({
+    assert state.note_zone_occupancy({
         "camera_id": "lower-garage",
+        "fail_safe_seconds": 240,
         "zones": [{"zone": "Driveway", "classes": ["car"]}],
-    })
+    }, live=True)
     assert entity.is_on is True
+    # A snapshot that omits the zone clears it.
+    state.note_zone_occupancy({"camera_id": "lower-garage", "zones": []}, live=True)
+    assert entity.is_on is False

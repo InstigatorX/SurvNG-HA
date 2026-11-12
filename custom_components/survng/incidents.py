@@ -32,7 +32,6 @@ class NativeIncidents:
         self._image_progress: dict[str, tuple[str, float]] = {}
         self._image_counts = {"queued": 0, "downloaded": 0, "saved": 0, "delivered": 0, "failed": 0}
         self._last_image_failure: dict | None = None
-        self._zone_expiries: list = []
         self._occupancy_expiries: dict[str, object] = {}
 
     def image_diagnostics(self) -> dict:
@@ -89,20 +88,6 @@ class NativeIncidents:
             self.hass, self._run(), "SurvNG incident stream", eager_start=False,
         )
 
-    def _accept_zone(self, payload: object, *, live: bool) -> None:
-        runtime = getattr(self.entry, "runtime_data", None)
-        if runtime is None or not runtime.mqtt.note_zone_objects(payload, live=live):
-            return
-        runtime.coordinator.async_update_listeners()
-        from homeassistant.helpers.event import async_call_later
-
-        def refresh(_now) -> None:
-            current = getattr(self.entry, "runtime_data", None)
-            if current is not None:
-                current.coordinator.async_update_listeners()
-
-        self._zone_expiries.append(async_call_later(self.hass, 15, refresh))
-
     def _accept_occupancy(self, payload: object, *, live: bool) -> None:
         runtime = getattr(self.entry, "runtime_data", None)
         if runtime is None or not isinstance(payload, dict):
@@ -130,9 +115,6 @@ class NativeIncidents:
         self._occupancy_expiries[camera_id] = async_call_later(self.hass, delay, refresh)
 
     async def stop(self) -> None:
-        for cancel in self._zone_expiries:
-            cancel()
-        self._zone_expiries.clear()
         for cancel in self._occupancy_expiries.values():
             cancel()
         self._occupancy_expiries.clear()
@@ -276,8 +258,6 @@ class NativeIncidents:
                         self.accept(payload)
                     elif kind == "zone_occupancy":
                         self._accept_occupancy(payload, live=self.connected)
-                    elif kind == "zone_object":
-                        self._accept_zone(payload, live=self.connected)
                     elif kind == "connected":
                         if not self._initialized:
                             raise SurvNGPayloadError("SurvNG server needs native incident notification support")
