@@ -61,7 +61,7 @@ def test_reconnect_uses_cursor_and_does_not_realert_replayed_revision(tmp_path):
         async def events(cursor):
             calls.append(cursor)
             if len(calls) == 1:
-                yield "", "incident_notifications_state", {"schema_version": 2, "incidents": [payload()]}
+                yield "", "incident_notifications_state", {"schema_version": 3, "incidents": [payload()]}
                 yield "boot:10", "connected", {}
                 yield "boot:11", "incident_lifecycle", payload(2, "updated", people=["Alex"])
                 raise SurvNGConnectionError("disconnected")
@@ -88,7 +88,7 @@ def test_server_restart_snapshot_recovers_missed_completion(tmp_path):
         async def events(cursor):
             calls.append(cursor)
             yield "", "incident_notifications_state", {
-                "schema_version": 2, "incidents": [payload(len(calls), "new" if len(calls) == 1 else "complete")],
+                "schema_version": 3, "incidents": [payload(len(calls), "new" if len(calls) == 1 else "complete")],
             }
             yield f"boot{len(calls)}:1", "connected", {}
             if len(calls) == 1:
@@ -147,7 +147,7 @@ def test_sse_rejects_oversized_and_invalid_data():
 def test_sse_decodes_a_large_snapshot_split_across_many_chunks():
     incidents = [{"id": index, "summary": "x" * 900} for index in range(6000)]
     body = ("event: incident_notifications_state\ndata: "
-            + json.dumps({"schema_version": 2, "incidents": incidents})
+            + json.dumps({"schema_version": 3, "incidents": incidents})
             + "\n\nid: boot:1\nevent: connected\ndata: {}\n\n").encode()
     assert len(body) > 4 * 1024 * 1024
 
@@ -276,7 +276,7 @@ def test_state_events_feed_the_coordinator_and_loss_restores_polling(tmp_path):
 
         async def events(cursor):
             calls.append(cursor)
-            yield "", "incident_notifications_state", {"schema_version": 2, "incidents": []}
+            yield "", "incident_notifications_state", {"schema_version": 3, "incidents": []}
             yield "", "cameras_state", [{"id": "gate"}]
             yield "", "system_state", {"instance_id": "server"}
             yield "boot:1", "connected", {}

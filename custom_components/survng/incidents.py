@@ -273,7 +273,7 @@ class NativeIncidents:
             try:
                 async for cursor, kind, payload in self.client.incident_events(self._cursor):
                     if kind == "incident_notifications_state":
-                        if not isinstance(payload, dict) or payload.get("schema_version") != 2:
+                        if not isinstance(payload, dict) or payload.get("schema_version") != 3:
                             raise SurvNGPayloadError("incompatible native incident snapshot")
                         for item in payload.get("incidents", []):
                             self.accept(item, notify=self._initialized)
