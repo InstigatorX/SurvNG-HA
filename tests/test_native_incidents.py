@@ -1,6 +1,7 @@
 """Native delivery without MQTT, including replay, images, and cancellation."""
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -20,8 +21,10 @@ def payload(revision=1, state="new", **changes):
 
 def native(tmp_path, client=None):
     hass = SimpleNamespace(config=SimpleNamespace(media_dirs={"local": str(tmp_path)}),
+                           bus=SimpleNamespace(async_fire=Mock()),
                            async_add_executor_job=AsyncMock(side_effect=lambda fn, *args: fn(*args)))
     entry = SimpleNamespace(entry_id="server", async_start_reauth=Mock(),
+                            data={"url": "https://survng.example/survng"},
                             async_create_background_task=lambda _hass, coro, _name, **_kwargs: asyncio.create_task(coro))
     return NativeIncidents(hass, entry, client or SimpleNamespace())
 
@@ -102,6 +105,141 @@ def test_server_restart_snapshot_recovers_missed_completion(tmp_path):
             await asyncio.wait_for(done.wait(), 1)
             await stream.stop()
         assert received == [("new", False), ("complete", True)]
+    asyncio.run(run())
+
+
+def zone_alert(alert_id, **changes):
+    now = datetime.now(UTC).isoformat()
+    return {"alert_id": alert_id, "camera_id": "lower-garage", "zone": "Driveway", "label": "car",
+            "observed_at": now, "confirmed_at": now, **changes}
+
+
+def test_zone_alerts_fire_once_from_new_lifecycle_facts(tmp_path):
+    async def run():
+        recovery = zone_alert("recovery")
+        live = zone_alert("live")
+        muted = zone_alert("local-mute", camera_id="gate")
+        server_muted = zone_alert("server-mute", notifications_enabled=False)
+        historical = zone_alert("old", confirmed_at=(datetime.now(UTC) - timedelta(minutes=3)).isoformat())
+        baseline = zone_alert("baseline")
+        received, calls = [], []
+        done = asyncio.Event()
+        allow_gate = False
+
+        async def events(cursor):
+            nonlocal allow_gate
+            calls.append(cursor)
+            if len(calls) == 1:
+                yield "", "incident_notifications_state", {
+                    "schema_version": 3, "incidents": [payload(zone_alerts=[baseline])],
+                }
+                yield "boot:10", "connected", {}
+                yield "boot:11", "incident_lifecycle", payload(
+                    2, "updated", notifications_enabled=False,
+                    zone_alerts=[baseline, live, muted, server_muted, historical, {}, None,
+                                 zone_alert("invalid", confirmed_at="yesterday")],
+                )
+                raise SurvNGConnectionError("disconnected")
+            if len(calls) == 2:
+                yield "boot:11", "incident_lifecycle", payload(2, "updated", zone_alerts=[live])
+                yield "boot:12", "incident_lifecycle", payload(3, "updated", zone_alerts=[zone_alert("replayed")])
+                yield "boot:12", "connected", {}
+                raise SurvNGConnectionError("restart")
+            yield "", "incident_notifications_state", {
+                "schema_version": 3, "incidents": [payload(4, "updated", zone_alerts=[recovery])],
+            }
+            yield "restart:10", "connected", {}
+            allow_gate = True
+            yield "restart:11", "incident_lifecycle", payload(
+                5, "complete", zone_alerts=[live, recovery, muted, {**server_muted, "notifications_enabled": True}]
+            )
+            yield "restart:12", "incident_lifecycle", payload(
+                6, "updated", incident_id="incident-merged", zone_alerts=[live, zone_alert("other-zone", zone="Porch")]
+            )
+            done.set()
+            await asyncio.Future()
+
+        stream = native(tmp_path, SimpleNamespace(incident_events=events))
+        stream.entry.runtime_data = SimpleNamespace(
+            coordinator=SimpleNamespace(set_state_streamed=Mock()),
+            notification_preferences=SimpleNamespace(
+                locally_enabled=lambda camera, zone: allow_gate or (camera, zone) != ("gate", "Driveway"),
+            ),
+        )
+        stream.subscribe(lambda item, notify: received.append((item.revision, notify)))
+        with patch("custom_components.survng.incidents.asyncio.sleep", new=AsyncMock()):
+            stream.start()
+            await asyncio.wait_for(done.wait(), 1)
+            await stream.stop()
+
+        assert calls == ["", "boot:11", "boot:12"]
+        assert received == [(1, False), (2, True), (3, True), (4, True), (5, True), (6, True)]
+        fired = [call.args for call in stream.hass.bus.async_fire.call_args_list]
+        assert [(kind, data["alert_id"]) for kind, data in fired] == [
+            ("survng_zone_alert", "live"), ("survng_zone_alert", "replayed"),
+            ("survng_zone_alert", "other-zone"),
+        ]
+        assert fired[0][1] == {
+            **live, "server_id": "server", "incident_id": "incident-gate-41",
+            "event_url": "https://survng.example/survng/incidents?event_ids=41",
+        }
+    asyncio.run(run())
+
+
+def test_zone_alert_does_not_repeat_on_image_or_completion(tmp_path):
+    async def run():
+        client = SimpleNamespace(incident_snapshot=AsyncMock(return_value=b"\xff\xd8image"))
+        stream = native(tmp_path, client)
+        stream.entry.runtime_data = SimpleNamespace(
+            notification_preferences=SimpleNamespace(locally_enabled=lambda _camera, _zone: True),
+        )
+        live = zone_alert("live")
+        stream.accept(payload(zone_alerts=[live], image_available=True))
+        await asyncio.gather(*stream._image_tasks.values())
+        stream.accept(payload(2, "complete", zone_alerts=[live], image_available=True))
+        await asyncio.gather(*stream._image_tasks.values())
+        stream.hass.bus.async_fire.assert_called_once()
+        assert client.incident_snapshot.await_count == 2
+        await stream.stop()
+    asyncio.run(run())
+
+
+def test_zone_alert_arrives_in_same_revision_as_startup_snapshot(tmp_path):
+    async def run():
+        done = asyncio.Event()
+        during_snapshot = zone_alert("during-snapshot")
+        stale_revision = zone_alert("stale-revision")
+        same_revision_url = "https://survng.example/survng/incidents/incident-gate-41"
+        stale_revision_url = "https://survng.example/survng/incidents?event_ids=40"
+
+        async def events(_cursor):
+            yield "", "incident_notifications_state", {"schema_version": 3, "incidents": [payload(2)]}
+            yield "boot:10", "connected", {}
+            yield "boot:11", "incident_lifecycle", payload(
+                2, zone_alerts=[during_snapshot], event_url=same_revision_url,
+            )
+            yield "boot:12", "incident_lifecycle", payload(
+                1, zone_alerts=[during_snapshot, stale_revision], event_url=stale_revision_url,
+            )
+            done.set()
+            await asyncio.Future()
+
+        stream = native(tmp_path, SimpleNamespace(incident_events=events))
+        stream.entry.runtime_data = SimpleNamespace(
+            notification_preferences=SimpleNamespace(locally_enabled=lambda _camera, _zone: True),
+        )
+        received = []
+        stream.subscribe(lambda item, notify: received.append((item.revision, notify)))
+        stream.start()
+        await asyncio.wait_for(done.wait(), 1)
+        await stream.stop()
+
+        assert received == [(2, False)]
+        fired = [call.args for call in stream.hass.bus.async_fire.call_args_list]
+        assert [(kind, data["alert_id"], data["event_url"]) for kind, data in fired] == [
+            ("survng_zone_alert", "during-snapshot", same_revision_url),
+            ("survng_zone_alert", "stale-revision", stale_revision_url),
+        ]
     asyncio.run(run())
 
 

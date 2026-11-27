@@ -53,10 +53,14 @@ class ZoneNotificationPreferences:
         self._disabled = {tuple(row) for row in rows}
 
     def enabled(self, camera_id: str, zone: str) -> bool:
-        if (camera_id, zone) in self._disabled:
+        if not self.locally_enabled(camera_id, zone):
             return False
         value = self._server_value(camera_id, zone)
         return value if value is not None else True
+
+    def locally_enabled(self, camera_id: str, zone: str) -> bool:
+        """Apply legacy HA mutes when SurvNG supplies the current server policy."""
+        return (camera_id, zone) not in self._disabled
 
     def allows(self, camera_id: str, zones: Iterable[str]) -> bool:
         matched = tuple(zones)

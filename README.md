@@ -113,6 +113,31 @@ ones. Turning it off does not retract notifications already sent to a phone.
 New zones are discovered during HTTP reconciliation. Removed zones become
 unavailable, and retain their preference if re-added with the same camera/name.
 
+## Zone alert automations
+
+On SurvNG servers that supply confirmed zone alerts, Home Assistant fires
+`survng_zone_alert` when incident detection confirms a matching camera, zone,
+and object class. This works with on-demand tracking. The camera and zone
+notification switches apply. Use the occupancy sensor to check current presence.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: survng_zone_alert
+    event_data:
+      camera_id: lower-garage
+      zone: Driveway
+      label: car
+```
+
+The event data also includes `alert_id`, `server_id`, `incident_id`, `event_url`,
+`observed_at`, and `confirmed_at`. Use `server_id` to select a specific SurvNG
+config entry when multiple servers have the same camera name. SurvNG records
+the first qualifying alert for each zone and class in a camera episode. Home
+Assistant deduplicates recent alerts by ID. Resumed stream delivery can include
+alerts confirmed within the last two minutes. Startup and recovery snapshots
+establish the baseline silently.
+
 ## Node-RED notifications
 
 Use the Home Assistant WebSocket nodes in Node-RED; no MQTT node is required:

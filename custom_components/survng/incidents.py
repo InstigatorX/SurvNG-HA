@@ -6,6 +6,7 @@ import logging
 import time
 from collections import OrderedDict
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 from .api import SurvNGAuthError, SurvNGError
 from .incident_images import IncidentImages
@@ -13,6 +14,10 @@ from .models import Incident, SurvNGPayloadError
 
 LOGGER = logging.getLogger(__name__)
 IMAGE_CLEANUP_INTERVAL = 60 * 60
+ZONE_ALERT_EVENT = "survng_zone_alert"
+ZONE_ALERT_MAX_AGE = timedelta(minutes=2)
+MAX_RECENT_ZONE_ALERTS = 8192
+ZONE_ALERT_FIELDS = ("alert_id", "camera_id", "zone", "label", "observed_at", "confirmed_at")
 
 
 class NativeIncidents:
@@ -33,6 +38,7 @@ class NativeIncidents:
         self._image_counts = {"queued": 0, "downloaded": 0, "saved": 0, "delivered": 0, "failed": 0}
         self._last_image_failure: dict | None = None
         self._occupancy_expiries: dict[str, object] = {}
+        self._seen_zone_alerts: OrderedDict[str, None] = OrderedDict()
 
     def image_diagnostics(self) -> dict:
         """Bounded operational state without image content, URLs, or raw errors."""
@@ -153,13 +159,54 @@ class NativeIncidents:
         for listener in tuple(self._listeners):
             listener(incident, notify)
 
-    def accept(self, payload: object, *, notify: bool = True) -> None:
+    def _accept_zone_alerts(self, alerts: object, incident: Incident, *, notify: bool) -> None:
+        if not isinstance(alerts, list):
+            return
+        runtime = getattr(self.entry, "runtime_data", None)
+        preferences = getattr(runtime, "notification_preferences", None)
+        cutoff = datetime.now(UTC) - ZONE_ALERT_MAX_AGE
+        for alert in alerts:
+            if not isinstance(alert, dict) or not all(
+                isinstance(alert.get(key), str) and alert[key].strip() for key in ZONE_ALERT_FIELDS
+            ):
+                continue
+            alert_id = alert["alert_id"]
+            if alert_id in self._seen_zone_alerts:
+                self._seen_zone_alerts.move_to_end(alert_id)
+                continue
+            enabled = alert.get("notifications_enabled", True)
+            if not isinstance(enabled, bool):
+                continue
+            try:
+                observed_at = datetime.fromisoformat(alert["observed_at"])
+                confirmed_at = datetime.fromisoformat(alert["confirmed_at"])
+            except ValueError:
+                continue
+            if observed_at.tzinfo is None or confirmed_at.tzinfo is None or confirmed_at < cutoff:
+                continue
+            # Baseline and muted alerts count as seen so later revisions cannot deliver them.
+            self._seen_zone_alerts[alert_id] = None
+            if len(self._seen_zone_alerts) > MAX_RECENT_ZONE_ALERTS:
+                self._seen_zone_alerts.popitem(last=False)
+            if (notify and enabled and preferences is not None
+                    and preferences.locally_enabled(alert["camera_id"], alert["zone"])):
+                self.hass.bus.async_fire(ZONE_ALERT_EVENT, {
+                    **{key: alert[key] for key in ZONE_ALERT_FIELDS},
+                    "server_id": self.entry.entry_id,
+                    "incident_id": incident.incident_id,
+                    "event_url": incident.event_data(self.entry.data["url"])["event_url"],
+                })
+
+    def accept(self, payload: object, *, notify: bool = True, snapshot: bool = False) -> None:
         try:
             incident = Incident.from_payload(payload)
             if incident.revision <= 0:
                 raise SurvNGPayloadError("native incident has no revision")
         except (TypeError, ValueError) as error:
             raise SurvNGPayloadError("native incident payload is invalid") from error
+        # A snapshot may already carry the incident revision that a lifecycle alert arrives with.
+        if isinstance(payload, dict):
+            self._accept_zone_alerts(payload.get("zone_alerts"), incident, notify=notify and not snapshot)
         previous = self.incidents.get(incident.incident_id)
         if previous is not None and previous.revision >= incident.revision:
             return
@@ -276,7 +323,7 @@ class NativeIncidents:
                         if not isinstance(payload, dict) or payload.get("schema_version") != 3:
                             raise SurvNGPayloadError("incompatible native incident snapshot")
                         for item in payload.get("incidents", []):
-                            self.accept(item, notify=self._initialized)
+                            self.accept(item, notify=self._initialized, snapshot=True)
                         self._initialized = True
                     elif kind == "incident_lifecycle":
                         self.accept(payload)
