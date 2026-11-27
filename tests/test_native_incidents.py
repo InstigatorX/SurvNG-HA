@@ -1,16 +1,19 @@
 """Native delivery without MQTT, including replay, images, and cancellation."""
 import asyncio
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from homeassistant.core import HomeAssistant
 
 from custom_components.survng.api import SurvNGAuthError, SurvNGConnectionError
 from custom_components.survng.event_stream import decode_events
 from custom_components.survng.incidents import NativeIncidents
 from custom_components.survng.models import SurvNGPayloadError
+from custom_components.survng.mqtt import SurvNGMqttState
 
 
 def payload(revision=1, state="new", **changes):
@@ -27,6 +30,38 @@ def native(tmp_path, client=None):
                             data={"url": "https://survng.example/survng"},
                             async_create_background_task=lambda _hass, coro, _name, **_kwargs: asyncio.create_task(coro))
     return NativeIncidents(hass, entry, client or SimpleNamespace())
+
+
+def test_native_occupancy_expiry_updates_listeners_on_the_event_loop(tmp_path):
+    async def run():
+        hass = HomeAssistant(str(tmp_path))
+        loop = asyncio.get_running_loop()
+        loop_thread = threading.get_ident()
+        expired = asyncio.Event()
+        state = SurvNGMqttState()
+        updates = []
+
+        def update():
+            updates.append((threading.get_ident(), state.zone_active("lower-garage", "driveway")))
+            if len(updates) == 2:
+                loop.call_soon_threadsafe(expired.set)
+
+        runtime = SimpleNamespace(mqtt=state, coordinator=SimpleNamespace(async_update_listeners=update))
+        stream = NativeIncidents(hass, SimpleNamespace(entry_id="server", runtime_data=runtime), None)
+        try:
+            stream._accept_occupancy({
+                "camera_id": "lower-garage",
+                "zones": [{"zone": "Driveway", "classes": ["car"]}],
+                "fail_safe_seconds": 0.05,
+            }, live=True)
+            await asyncio.wait_for(expired.wait(), 2)
+            assert updates == [(loop_thread, True), (loop_thread, False)]
+            assert not stream._occupancy_expiries
+        finally:
+            await stream.stop()
+            await hass.async_block_till_done()
+
+    asyncio.run(run())
 
 
 def test_images_revisions_and_duplicate_suppression(tmp_path):

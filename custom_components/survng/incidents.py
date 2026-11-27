@@ -8,6 +8,8 @@ from collections import OrderedDict
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from homeassistant.core import callback
+
 from .api import SurvNGAuthError, SurvNGError
 from .incident_images import IncidentImages
 from .models import Incident, SurvNGPayloadError
@@ -136,6 +138,7 @@ class NativeIncidents:
         if existing:
             existing()
 
+        @callback
         def refresh(_now) -> None:
             self._occupancy_expiries.pop(camera_id, None)
             current = getattr(self.entry, "runtime_data", None)
