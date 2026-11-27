@@ -50,6 +50,10 @@ enabled, it also fires `survng_incident` with:
 - `event_url`, `changed_fields`, and `delivery` (`lifecycle` or `image`).
 - `notifications_enabled`, evaluated against the HA zone switches at delivery.
 
+When an incident event exceeds Home Assistant Recorder's 32 KiB limit, the
+integration compacts detection details, prioritizes notification fields, and
+sets `details_truncated`. Use `event_url` to open the full incident in SurvNG.
+
 Text is delivered immediately. Image download completion fires another event
 with the same incident revision and notification tag, with `delivery: image`.
 `initial_image_url` preserves the first image fetched during live delivery;
@@ -157,7 +161,7 @@ Use the Home Assistant WebSocket nodes in Node-RED; no MQTT node is required:
    Keep **Block Input Overrides** enabled so the incoming HA event payload cannot
    override the configured action or notification data. The **Action** field must
    contain your actual notification action; selecting a device alone is not enough.
-4. Use a Debug node on `msg.incident` to inspect the full detection information.
+4. Use a Debug node on `msg.incident` to inspect the detection information in the event.
 
 If Node-RED reports `ValidationError: "action" is not allowed to be empty`, open
 the Action node and select a valid action such as `notify.mobile_app_your_phone`.

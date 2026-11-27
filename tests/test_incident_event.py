@@ -4,12 +4,16 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+from homeassistant.helpers.json import json_bytes
+
 from custom_components.survng import event
 from custom_components.survng.models import Incident
 from custom_components.survng.mqtt import SurvNGMqttState
 
 
-def test_native_incidents_publish_rich_events_and_suppress_baseline() -> None:
+@pytest.mark.parametrize("detail", ["normal", "large_observation", "large_metadata"])
+def test_native_incidents_publish_rich_events_and_suppress_baseline(detail) -> None:
     native = SimpleNamespace(incidents={}, subscribe=Mock(return_value=lambda: None))
     coordinator = SimpleNamespace()
     entry = SimpleNamespace(
@@ -21,11 +25,17 @@ def test_native_incidents_publish_rich_events_and_suppress_baseline() -> None:
     with patch.object(event, "setup_dynamic_camera_entities", return_value=lambda: None):
         asyncio.run(event.async_setup_entry(hass, entry, Mock()))
     receive = native.subscribe.call_args.args[0]
+    observation = {"box": [0, 0, 1, 1], "zones": ["Driveway"]}
+    if detail == "large_observation":
+        observation["detail"] = "車" * 12_000
+    semantics = {"reports": ["車" * 12_000]} if detail == "large_metadata" else {}
     incident = Incident.from_payload({
         "incident_id": "incident-gate-8", "camera_id": "gate", "state": "new",
         "representative_event_id": 8, "event_ids": [8], "classes": ["person"],
         "revision": 1, "people": ["Alex"], "summary": "Alex detected at Gate.",
-        "objects": [{"label": "person", "confidence": 0.9}],
+        "objects": [{"label": "person", "confidence": 0.9, "observation_count": 1,
+                     "observations": [observation]}],
+        "camera_semantics": semantics,
     })
     receive(incident, False)
     hass.bus.async_fire.assert_not_called()
@@ -37,6 +47,18 @@ def test_native_incidents_publish_rich_events_and_suppress_baseline() -> None:
     assert payload["notification_tag"] == "survng-server-incident-gate-8"
     assert payload["event_url"] == "https://survng.example/survng/incidents?event_ids=8"
     assert payload["reconciled"] is False
+    assert payload["classes"] == ["person"]
+    assert payload["event_ids"] == [8]
+    assert payload["objects"][0]["observation_count"] == 1
+    assert len(json_bytes(payload)) <= 32_768
+    if detail == "normal":
+        assert payload["objects"][0]["observations"] == [observation]
+        assert "details_truncated" not in payload
+    else:
+        assert payload["details_truncated"] is True
+        assert payload["objects"][0]["zones"] == ["Driveway"]
+        assert incident.details["objects"][0]["observations"] == [observation]
+        assert incident.details["camera_semantics"] == semantics
 
 
 def test_http_only_reconciliation_does_not_claim_completion() -> None:

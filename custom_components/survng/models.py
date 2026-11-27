@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from homeassistant.helpers.json import json_bytes
+
 
 class SurvNGPayloadError(ValueError):
     """Raised when SurvNG returns an incompatible payload."""
@@ -146,18 +148,24 @@ class StreamSource:
 # Home Assistant refuses to record state attributes above 16 KiB. Leave room
 # for the entity's own name and event type.
 ENTITY_ATTRIBUTE_BUDGET = 14336
+INCIDENT_EVENT_BUDGET = 32_768
 _HEAVY_ENTITY_KEYS = ("camera_semantics", "identities")
 _COMPACT_OBJECT_KEYS = ("id", "label", "confidence", "certainty")
+_INCIDENT_EVENT_PRIORITY = (
+    "incident_id", "camera_id", "server_id", "state", "revision", "delivery",
+    "notification_tag", "event_url", "image_url", "title", "summary",
+    "classes", "zones", "people", "objects",
+)
 
 
 def _json_size(payload: dict) -> int:
     return len(json.dumps(payload, default=str, separators=(",", ":")).encode())
 
 
-def _compact_subject(item: dict) -> dict:
+def _compact_subject(item: dict, *, keys: tuple[str, ...] = _COMPACT_OBJECT_KEYS) -> dict:
     compact = {
         key: item[key]
-        for key in _COMPACT_OBJECT_KEYS
+        for key in keys
         if key in item and item[key] not in (None, "", [], {})
     }
     zones: list[str] = []
@@ -173,6 +181,28 @@ def _compact_subject(item: dict) -> dict:
     if zones:
         compact["zones"] = zones
     return compact
+
+
+def incident_bus_event_data(payload: dict) -> dict:
+    """Keep the bus event within Home Assistant Recorder's event data limit."""
+    if len(json_bytes(payload)) <= INCIDENT_EVENT_BUDGET:
+        return payload
+
+    stored = {"details_truncated": True}
+    remaining = INCIDENT_EVENT_BUDGET - len(json_bytes(stored))
+    for key in dict.fromkeys((*_INCIDENT_EVENT_PRIORITY, *payload)):
+        if key not in payload or key == "details_truncated":
+            continue
+        value = payload[key]
+        if key == "objects" and isinstance(value, list):
+            value = [_compact_subject(item, keys=(*_COMPACT_OBJECT_KEYS, "observation_count"))
+                     for item in value if isinstance(item, dict)]
+        # The singleton's braces are replaced by one comma in the stored event.
+        size = len(json_bytes({key: value})) - 1
+        if size <= remaining:
+            stored[key] = value
+            remaining -= size
+    return stored
 
 
 def entity_event_attributes(payload: dict) -> dict:
